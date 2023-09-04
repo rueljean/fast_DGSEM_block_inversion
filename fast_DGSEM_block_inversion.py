@@ -207,13 +207,15 @@ def eigen_2D(Psi, lambda_x, lambda_y):
     Return:
         np.ndarray with containing the 2D eigenvalues
     """
-    lbd = lambda_x + lambda_y
+    # lbd = lambda_x + lambda_y
 
-    I = np.eye(Psi.shape[0])
-    # Psi_lbd = I - 2 * lbd * np.diag(Psi)
-    Psi_lbd = np.diag(1.0 - 2.0 * lbd * Psi)
-    Psi2d = lambda_x / lbd * np.kron(I, Psi_lbd) + lambda_y / lbd * np.kron(Psi_lbd, I)
-    return Psi2d
+    # I = np.eye(Psi.shape[0])
+    # # Psi_lbd = I - 2 * lbd * np.diag(Psi)
+    # Psi_lbd = np.diag(1.0 - 2.0 * lbd * Psi)
+    # Psi2d = lambda_x / lbd * np.kron(I, Psi_lbd) + lambda_y / lbd * np.kron(Psi_lbd, I)
+    return np.diag(
+        1. - 2. * np.array([lambda_x*p_i + lambda_y*p_j for p_j in Psi for p_i in Psi])
+    )
 
 
 def eigen_L_numpy(D):
