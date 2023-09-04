@@ -6,7 +6,7 @@ import fast_DGSEM_block_inversion as f_dgsem
 
 @pytest.mark.parametrize("p", [2, 3, 4, 5])
 @pytest.mark.parametrize("lambda_x", [1.0, 2.0])
-@pytest.mark.parametrize("lambda_y", [1.0, 1.0])
+@pytest.mark.parametrize("lambda_y", [1.0])
 class TestMethods:
     def test_eigen(self, p, lambda_x, lambda_y):
         # lambda_x/y not useful here, but we keep to have the parametrize
