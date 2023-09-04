@@ -276,7 +276,16 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
     )
 
 
-def L2d_inversion_analytical(D, M, lambda_x, lambda_y):
+def L2d_inversion_analytical(
+    D,
+    M,
+    lambda_x,
+    lambda_y,
+    Psi=None,
+    R=None,
+    invR=None,
+    invMR=None,
+):
     """Invert 2D systems resulting from DGSEM problems with analytical method
 
     D: np.ndarray
@@ -290,14 +299,16 @@ def L2d_inversion_analytical(D, M, lambda_x, lambda_y):
     Return:
         The inverse of the 2D matrix
     """
-    Psi = eigen_L_analytical(D)
-    # Psi = eigen_L_numpy(D)
-
+    Psi = Psi if Psi is not None else eigen_L_analytical(D)
     Psi2d = eigen_2D(Psi, lambda_x, lambda_y)
-    R = R_matrix(D, Psi)
-    invR = np.linalg.inv(R)
-    # invMR = np.dot(np.linalg.inv(M), R)
-    invMR = diagonal_matrix_multiply(np.reciprocal(np.diag(M)), R)
+
+    R = R if R is not None else R_matrix(D, Psi)
+    invR = invR if invR is not None else np.linalg.inv(R)
+    invMR = (
+        invMR
+        if invMR is not None
+        else diagonal_matrix_multiply(np.reciprocal(np.diag(M)), R)
+    )
 
     return np.dot(
         # np.kron(invMR, invMR), np.dot(np.linalg.inv(Psi2d), np.kron(invR, invR))
@@ -352,7 +363,15 @@ def L2d_inversion_viscosity_numpy(D, M, lambda_x, lambda_y):
     return L2dV_numpyInv
 
 
-def L2d_inversion_viscosity_analytical(D, M, lambda_x, lambda_y):
+def L2d_inversion_viscosity_analytical(
+    D,
+    M,
+    lambda_x,
+    lambda_y,
+    Psi=None,
+    R=None,
+    invR=None,
+):
     """Invert 2D systems resulting from DGSEM problems with graph-viscosity with
     analytical formula
 
@@ -373,11 +392,11 @@ def L2d_inversion_viscosity_analytical(D, M, lambda_x, lambda_y):
     lobatto_weights = LOBATTO_WEIGHTS_BY_ORDER[p]
     d_min = d_min_BY_ORDER[p]
 
-    Psi = eigen_L_analytical(D)
-    # Psi = eigen_L_numpy(D)
+    Psi = Psi if Psi is not None else eigen_L_analytical(D)
     Psi2d = eigen_2D(Psi, lambda_x, lambda_y)
-    R = R_matrix(D, Psi)
-    invR = np.linalg.inv(R)
+
+    R = R if R is not None else R_matrix(D, Psi)
+    invR = invR if invR is not None else np.linalg.inv(R)
 
     lbd = lambda_x + lambda_y
 
