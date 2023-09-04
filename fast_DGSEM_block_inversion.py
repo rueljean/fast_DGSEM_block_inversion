@@ -98,6 +98,23 @@ def lagrange_derivative(l, xi, pts):
     return p / c
 
 
+def diagonal_matrix_multiply(A_diag, B):
+    """Fast way to compute A.B whenever A is diagonal.
+    Taken from https://stackoverflow.com/a/44388621/12152457
+
+    A_diag: np.ndarray
+        Diagonal of first matrix
+    B: np.ndarray
+        Second matrix
+    invert_A: bool
+        Whether to invert A before multiplying
+
+    Return: np.ndarray
+        Result of the multiplication
+    """
+    return A_diag[:, None] * B
+
+
 def D_matrix(p):
     """Discrete derivative matrix
 
@@ -254,7 +271,9 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
     """
     L2d = L2d_matrix(D, lambda_x, lambda_y)
 
-    return np.dot(np.linalg.inv(np.kron(M, M)), np.linalg.inv(L2d))
+    return diagonal_matrix_multiply(
+        np.reciprocal(np.diag(np.kron(M, M))), np.linalg.inv(L2d)
+    )
 
 
 def L2d_inversion_analytical(D, M, lambda_x, lambda_y):
@@ -277,10 +296,13 @@ def L2d_inversion_analytical(D, M, lambda_x, lambda_y):
     Psi2d = eigen_2D(Psi, lambda_x, lambda_y)
     R = R_matrix(D, Psi)
     invR = np.linalg.inv(R)
-    invMR = np.dot(np.linalg.inv(M), R)
+    # invMR = np.dot(np.linalg.inv(M), R)
+    invMR = diagonal_matrix_multiply(np.reciprocal(np.diag(M)), R)
 
     return np.dot(
-        np.kron(invMR, invMR), np.dot(np.linalg.inv(Psi2d), np.kron(invR, invR))
+        # np.kron(invMR, invMR), np.dot(np.linalg.inv(Psi2d), np.kron(invR, invR))
+        np.kron(invMR, invMR),
+        diagonal_matrix_multiply(np.reciprocal(np.diag(Psi2d)), np.kron(invR, invR)),
     )
 
 
@@ -324,7 +346,9 @@ def L2d_inversion_viscosity_numpy(D, M, lambda_x, lambda_y):
     L2dV = L2d0 - np.dot(Uv, np.transpose(Vv))
 
     # Diagonal block inversion with numpy
-    L2dV_numpyInv = np.dot(np.linalg.inv(np.kron(M, M)), np.linalg.inv(L2dV))
+    L2dV_numpyInv = diagonal_matrix_multiply(
+        np.reciprocal(np.diag(np.kron(M, M))), np.linalg.inv(L2dV)
+    )
     return L2dV_numpyInv
 
 
@@ -364,15 +388,18 @@ def L2d_inversion_viscosity_analytical(D, M, lambda_x, lambda_y):
     )
 
     # Explicit diagonal block inversion
-    invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
-    invL2d0 = np.dot(np.kron(R, R), np.dot(invPsi2d, np.kron(invR, invR)))
+    # invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
+    invdiagPsi = np.reciprocal(np.diag(Psi2d) + 2 * d_min * lbd)
+    invL2d0 = np.dot(
+        np.kron(R, R), diagonal_matrix_multiply(invdiagPsi, np.kron(invR, invR))
+    )
 
     invROmega = np.dot(invR, lobatto_weights.reshape((p + 1, 1)))
 
     Z = np.dot(
         np.kron(R, R),
-        np.dot(
-            invPsi2d,
+        diagonal_matrix_multiply(
+            invdiagPsi,
             np.concatenate(
                 (
                     np.kron(lambda_x * invR, invROmega),
@@ -383,9 +410,10 @@ def L2d_inversion_viscosity_analytical(D, M, lambda_x, lambda_y):
         ),
     )
 
+    MkM = np.kron(M, M)
     # TODO: check the line below
-    # L2dV_explInv = np.dot(
-    #     np.linalg.inv(np.kron(M, M)),
+    # L2dV_explInv = diagonal_matrix_multiply(
+    #     np.reciprocal(np.diag(MkM)),
     #     np.dot(
     #         np.kron(I, I)
     #         + np.dot(
@@ -399,8 +427,8 @@ def L2d_inversion_viscosity_analytical(D, M, lambda_x, lambda_y):
     #     ),
     # )
 
-    L2dV_explInv = np.dot(
-        np.linalg.inv(np.kron(M, M)),
+    L2dV_explInv = diagonal_matrix_multiply(
+        np.reciprocal(np.diag(MkM)),
         np.dot(np.linalg.inv(np.kron(I, I) - np.dot(Z, np.transpose(Vv))), invL2d0),
     )
     return L2dV_explInv
