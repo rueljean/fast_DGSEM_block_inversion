@@ -115,6 +115,14 @@ def diagonal_matrix_multiply(A_diag, B):
     return A_diag[:, None] * B
 
 
+def diagonal_auto_kron(A_diag):
+    """Let A be a diagonal matrix and A_diag its diagonal, this function compute
+    np.diag(np.kron(A, A)) taking advantage of the structure of the matrix
+    """
+    # Vector-vector product, then flatten the resulting matrix
+    return np.multiply(A_diag.reshape((A_diag.shape[0], -1)), A_diag).flatten()
+
+
 def D_matrix(p):
     """Discrete derivative matrix
 
@@ -207,15 +215,27 @@ def eigen_2D(Psi, lambda_x, lambda_y):
     Return:
         np.ndarray with containing the 2D eigenvalues
     """
-    # lbd = lambda_x + lambda_y
+    lbd = lambda_x + lambda_y
 
-    # I = np.eye(Psi.shape[0])
-    # # Psi_lbd = I - 2 * lbd * np.diag(Psi)
-    # Psi_lbd = np.diag(1.0 - 2.0 * lbd * Psi)
-    # Psi2d = lambda_x / lbd * np.kron(I, Psi_lbd) + lambda_y / lbd * np.kron(Psi_lbd, I)
-    return np.diag(
-        1. - 2. * np.array([lambda_x*p_i + lambda_y*p_j for p_j in Psi for p_i in Psi])
-    )
+    I = np.eye(Psi.shape[0])
+    # Psi_lbd = I - 2 * lbd * np.diag(Psi)
+    Psi_lbd = np.diag(1.0 - 2.0 * lbd * Psi)
+    Psi2d = lambda_x / lbd * np.kron(I, Psi_lbd) + lambda_y / lbd * np.kron(Psi_lbd, I)
+    return Psi2d
+
+def eigen_2D_diag(Psi, lambda_x, lambda_y):
+    """Given the 1D ones, compute the 2D eigen-values
+
+    Psi: np.ndarray
+        1D eigenvalues
+    lambda_x, lambda_y: float
+        Celerity*time step over spatial grid size in, respectively, in x
+        and y direction
+
+    Return:
+        np.ndarray with containing the 2D eigenvalues
+    """
+    return 1. - 2. * np.array([lambda_x*p_i + lambda_y*p_j for p_j in Psi for p_i in Psi])
 
 
 def eigen_L_numpy(D):
@@ -274,7 +294,7 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
     L2d = L2d_matrix(D, lambda_x, lambda_y)
 
     return diagonal_matrix_multiply(
-        np.reciprocal(np.diag(np.kron(M, M))), np.linalg.inv(L2d)
+        np.reciprocal(diagonal_auto_kron(np.diag(M))), np.linalg.inv(L2d)
     )
 
 
@@ -302,7 +322,7 @@ def L2d_inversion_analytical(
         The inverse of the 2D matrix
     """
     Psi = Psi if Psi is not None else eigen_L_analytical(D)
-    Psi2d = eigen_2D(Psi, lambda_x, lambda_y)
+    Psi2d_diag = eigen_2D_diag(Psi, lambda_x, lambda_y)
 
     R = R if R is not None else R_matrix(D, Psi)
     invR = invR if invR is not None else np.linalg.inv(R)
@@ -315,7 +335,7 @@ def L2d_inversion_analytical(
     return np.dot(
         # np.kron(invMR, invMR), np.dot(np.linalg.inv(Psi2d), np.kron(invR, invR))
         np.kron(invMR, invMR),
-        diagonal_matrix_multiply(np.reciprocal(np.diag(Psi2d)), np.kron(invR, invR)),
+        diagonal_matrix_multiply(np.reciprocal(Psi2d_diag), np.kron(invR, invR)),
     )
 
 
@@ -344,7 +364,9 @@ def L2d_inversion_viscosity_numpy(D, M, lambda_x, lambda_y):
 
     I = np.eye(p + 1)
 
-    L2d0 = L2d_matrix(D, lambda_x, lambda_y) + 2 * d_min * lbd * np.kron(I, I)
+    # L2d0 = L2d_matrix(D, lambda_x, lambda_y) + 2 * d_min * lbd * np.kron(I, I)
+    L2d0 = L2d_matrix(D, lambda_x, lambda_y)
+    L2d0[np.diag_indices_from(L2d0)] += 2 * d_min * lbd
     Uv = np.concatenate(
         (
             lambda_x * np.kron(I, lobatto_weights.reshape((p + 1, 1))),
@@ -358,10 +380,10 @@ def L2d_inversion_viscosity_numpy(D, M, lambda_x, lambda_y):
 
     L2dV = L2d0 - np.dot(Uv, np.transpose(Vv))
 
+    # M is diagonal, hence we M<kron>M is diagonal
+    invMkM_diag = np.reciprocal(diagonal_auto_kron(np.diag(M)))
     # Diagonal block inversion with numpy
-    L2dV_numpyInv = diagonal_matrix_multiply(
-        np.reciprocal(np.diag(np.kron(M, M))), np.linalg.inv(L2dV)
-    )
+    L2dV_numpyInv = diagonal_matrix_multiply(invMkM_diag, np.linalg.inv(L2dV))
     return L2dV_numpyInv
 
 
@@ -395,7 +417,7 @@ def L2d_inversion_viscosity_analytical(
     d_min = d_min_BY_ORDER[p]
 
     Psi = Psi if Psi is not None else eigen_L_analytical(D)
-    Psi2d = eigen_2D(Psi, lambda_x, lambda_y)
+    Psi2d_diag = eigen_2D_diag(Psi, lambda_x, lambda_y)
 
     R = R if R is not None else R_matrix(D, Psi)
     invR = invR if invR is not None else np.linalg.inv(R)
@@ -410,7 +432,7 @@ def L2d_inversion_viscosity_analytical(
 
     # Explicit diagonal block inversion
     # invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
-    invdiagPsi = np.reciprocal(np.diag(Psi2d) + 2 * d_min * lbd)
+    invdiagPsi = np.reciprocal(Psi2d_diag + 2 * d_min * lbd)
     invL2d0 = np.dot(
         np.kron(R, R), diagonal_matrix_multiply(invdiagPsi, np.kron(invR, invR))
     )
@@ -431,12 +453,13 @@ def L2d_inversion_viscosity_analytical(
         ),
     )
 
-    MkM = np.kron(M, M)
+    # M is diagonal, hence we M<kron>M is diagonal
+    invMkM_diag = np.reciprocal(diagonal_auto_kron(np.diag(M)))
     # TODO: check the line below
     # L2dV_explInv = diagonal_matrix_multiply(
-    #     np.reciprocal(np.diag(MkM)),
+    #     invMkM_diag,
     #     np.dot(
-    #         np.kron(I, I)
+    #         np.kron(I, I)  # It's just an identity, replace as sum of 1 on the diagonal
     #         + np.dot(
     #             Z,
     #             np.dot(
@@ -448,9 +471,11 @@ def L2d_inversion_viscosity_analytical(
     #     ),
     # )
 
+
+    IkI_ZVv = -np.dot(Z, np.transpose(Vv))
+    IkI_ZVv[np.diag_indices_from(IkI_ZVv)] += 1.
     L2dV_explInv = diagonal_matrix_multiply(
-        np.reciprocal(np.diag(MkM)),
-        np.dot(np.linalg.inv(np.kron(I, I) - np.dot(Z, np.transpose(Vv))), invL2d0),
+        invMkM_diag, np.dot(np.linalg.inv(IkI_ZVv), invL2d0)
     )
     return L2dV_explInv
 
