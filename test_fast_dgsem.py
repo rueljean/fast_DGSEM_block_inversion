@@ -4,7 +4,7 @@ import pytest
 import fast_DGSEM_block_inversion as f_dgsem
 
 
-@pytest.mark.parametrize("p", [2, 3, 4, 5])
+@pytest.mark.parametrize("p", [2, 3, 4, 5, 6])
 @pytest.mark.parametrize("lambda_x", [1.0, 2.0])
 @pytest.mark.parametrize("lambda_y", [1.0])
 class TestMethods:
