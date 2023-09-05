@@ -27,7 +27,7 @@ import numpy as np
 _1OV3 = 1.0 / 3.0
 _1OV6 = 0.5 * _1OV3
 _SQRT1OV5 = math.sqrt(0.2)
-_SQRT1OV7 = math.sqrt(10.0 / 7.0)
+_SQRT5V3 = math.sqrt(5.0 / 3.0)
 _SQRT3OV7 = math.sqrt(3.0 / 7.0)
 _SQRT7 = math.sqrt(7.0)
 _2SQRT7OV21 = 2.0 * _SQRT7 / 21.0
@@ -49,18 +49,18 @@ LOBATTO_POINTS_BY_ORDER = {
     6: np.array(
         [
             -1.0,
-            -_1OV3*math.sqrt(5.0 + 2.0 * _SQRT1OV7),
-            -_1OV3*math.sqrt(5.0 - 2.0 * _SQRT1OV7),
+            -math.sqrt( (5.0 + 2.0 * _SQRT5V3) / 11.0),
+            -math.sqrt( (5.0 - 2.0 * _SQRT5V3) / 11.0),
             0.0,
-            +_1OV3*math.sqrt(5.0 - 2.0 * _SQRT1OV7),
-            +_1OV3*math.sqrt(5.0 + 2.0 * _SQRT1OV7),
+            +math.sqrt( (5.0 - 2.0 * _SQRT5V3) / 11.0),
+            +math.sqrt( (5.0 + 2.0 * _SQRT5V3) / 11.0),
             1.0,
         ],
     ),
 }
 
 _49OV90 = 49.0 / 90.0
-_SQRT70 = math.sqrt(70.0)
+_SQRT15 = math.sqrt(15.0)
 LOBATTO_WEIGHTS_BY_ORDER = {
     1: np.array([1, 1]),
     2: np.array([_1OV3, 4.0 * _1OV3, _1OV3]),
@@ -79,11 +79,11 @@ LOBATTO_WEIGHTS_BY_ORDER = {
     6: np.array(
         [
             1.0 / 21.0,
-            (322.0 - 13.0 * _SQRT70) / 900.0,
-            (322.0 + 13.0 * _SQRT70) / 900.0,
-            128.0 / 225.0,
-            (322.0 + 13.0 * _SQRT70) / 900.0,
-            (322.0 - 13.0 * _SQRT70) / 900.0,
+            (124 - 7.0 * _SQRT15) / 350.0,
+            (124 + 7.0 * _SQRT15) / 350.0,
+            256.0 / 525.0,
+            (124 + 7.0 * _SQRT15) / 350.0,
+            (124 - 7.0 * _SQRT15) / 350.0,
             1.0 / 21.0,
         ]
     ),
