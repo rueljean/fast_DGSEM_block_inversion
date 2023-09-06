@@ -27,7 +27,7 @@ import numpy as np
 _1OV3 = 1.0 / 3.0
 _1OV6 = 0.5 * _1OV3
 _SQRT1OV5 = math.sqrt(0.2)
-_SQRT5V3 = math.sqrt(5.0 / 3.0)
+_SQRT5OV3 = math.sqrt(5.0 / 3.0)
 _SQRT3OV7 = math.sqrt(3.0 / 7.0)
 _SQRT7 = math.sqrt(7.0)
 _2SQRT7OV21 = 2.0 * _SQRT7 / 21.0
@@ -49,11 +49,11 @@ LOBATTO_POINTS_BY_ORDER = {
     6: np.array(
         [
             -1.0,
-            -math.sqrt( (5.0 + 2.0 * _SQRT5V3) / 11.0),
-            -math.sqrt( (5.0 - 2.0 * _SQRT5V3) / 11.0),
+            -math.sqrt((5.0 + 2.0 * _SQRT5OV3) / 11.0),
+            -math.sqrt((5.0 - 2.0 * _SQRT5OV3) / 11.0),
             0.0,
-            +math.sqrt( (5.0 - 2.0 * _SQRT5V3) / 11.0),
-            +math.sqrt( (5.0 + 2.0 * _SQRT5V3) / 11.0),
+            +math.sqrt((5.0 - 2.0 * _SQRT5OV3) / 11.0),
+            +math.sqrt((5.0 + 2.0 * _SQRT5OV3) / 11.0),
             1.0,
         ],
     ),
@@ -147,6 +147,14 @@ def diagonal_auto_kron(A_diag):
     return np.multiply(A_diag.reshape((A_diag.shape[0], -1)), A_diag).flatten()
 
 
+def diagonal_add(A, val=1):
+    """Add `val` to the diagonal of `A`. Hence, `diagonal_add(A, 1)` is equivalent to
+    adding the identity matrix to `A`
+    """
+    A[np.diag_indices_from(A)] += val
+    return A
+
+
 def D_matrix(p):
     """Discrete derivative matrix
 
@@ -194,8 +202,7 @@ def L2d_matrix(D, lambda_x, lambda_y):
     lbd = lambda_x + lambda_y
 
     I = np.eye(D.shape[0])
-    L = L_matrix(D)
-    L1d = I - 2 * lbd * L
+    L1d = diagonal_add(-2 * lbd * L_matrix(D))
 
     L2d = lambda_x / lbd * np.kron(I, L1d) + lambda_y / lbd * np.kron(L1d, I)
     return L2d
@@ -247,6 +254,7 @@ def eigen_2D(Psi, lambda_x, lambda_y):
     Psi2d = lambda_x / lbd * np.kron(I, Psi_lbd) + lambda_y / lbd * np.kron(Psi_lbd, I)
     return Psi2d
 
+
 def eigen_2D_diag(Psi, lambda_x, lambda_y):
     """Given the 1D ones, compute the 2D eigen-values
 
@@ -259,7 +267,9 @@ def eigen_2D_diag(Psi, lambda_x, lambda_y):
     Return:
         np.ndarray with containing the 2D eigenvalues
     """
-    return 1. - 2. * np.array([lambda_x*p_i + lambda_y*p_j for p_j in Psi for p_i in Psi])
+    return 1.0 - 2.0 * np.array(
+        [lambda_x * p_i + lambda_y * p_j for p_j in Psi for p_i in Psi]
+    )
 
 
 def eigen_L_numpy(D):
@@ -328,9 +338,6 @@ def L2d_inversion_analytical(
     lambda_x,
     lambda_y,
     Psi=None,
-    #R=None,
-    #invR=None,
-    #invMR=None,
     iR2d=None,
     iMR2d=None,
 ):
@@ -343,6 +350,13 @@ def L2d_inversion_analytical(
     lambda_x, lambda_y: float
         Celerity*time step over spatial grid size in, respectively, in x
         and y direction
+    Psi: np.ndarray or None
+        Eigenvalues
+    iR2d: np.ndarray or None
+        Kronecker product of the inverse of the right-eigenvector matrix by itself
+    iMR2d: np.ndarray or None
+        Kronecker product of the product of the inverse of the mass matrix by the
+        right-eigenvector matrix by itself
 
     Return:
         The inverse of the 2D matrix
@@ -350,11 +364,11 @@ def L2d_inversion_analytical(
     Psi = Psi if Psi is not None else eigen_L_analytical(D)
     Psi2d_diag = eigen_2D_diag(Psi, lambda_x, lambda_y)
 
-    if(iR2d is None or iMR2d is None):
+    if iR2d is None or iMR2d is None:
         R = R_matrix(D, Psi)
         invR = np.linalg.inv(R)
         invMR = diagonal_matrix_multiply(np.reciprocal(np.diag(M)), R)
-    
+
     iMR2d = iMR2d if iMR2d is not None else np.kron(invMR, invMR)
     iR2d = iR2d if iR2d is not None else np.kron(invR, invR)
 
@@ -365,14 +379,14 @@ def L2d_inversion_analytical(
 
 
 def L2d_inversion_viscosity_numpy(
-    D, 
-    M, 
-    lambda_x, 
+    D,
+    M,
+    lambda_x,
     lambda_y,
     VvT=None,
     IOmega=None,
     OmegaI=None,
-    ):
+):
     """Invert 2D systems resulting from DGSEM problems with graph-viscosity with
     standard `numpy` functions
 
@@ -383,8 +397,14 @@ def L2d_inversion_viscosity_numpy(
     M: np.ndarray
         Mass matrix
     lambda_x, lambda_y: float
-        Ration between celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
+    VvT: np.array or None
+        Matrix with sparse structure for 2D problems
+    IOmega: np.array or None
+        Kronecker product of identity and Lobatto weights
+    OmegaI: np.array or None
+        Kronecker product of Lobatto weights and identity
 
     Return:
         The inverse of the matrix
@@ -398,30 +418,23 @@ def L2d_inversion_viscosity_numpy(
     I = np.eye(p + 1)
 
     # L2d0 = L2d_matrix(D, lambda_x, lambda_y) + 2 * d_min * lbd * np.kron(I, I)
-    L2d0 = L2d_matrix(D, lambda_x, lambda_y)
-    L2d0[np.diag_indices_from(L2d0)] += 2 * d_min * lbd
-    
-    
-    if(IOmega is None or OmegaI is None):
+    L2d0 = diagonal_add(L2d_matrix(D, lambda_x, lambda_y), 2 * d_min * lbd)
+
+    if IOmega is None or OmegaI is None:
         Omega = lobatto_weights.reshape((p + 1, 1))
     IOmega = IOmega if IOmega is not None else np.kron(I, Omega)
     OmegaI = OmegaI if OmegaI is not None else np.kron(Omega, I)
-    
-    Uv = np.concatenate(
-        (
-            lambda_x * IOmega,
-            lambda_y * OmegaI,
-        ),
-        axis=1,
-    )
-    #Vv = np.concatenate(
-    #    (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)), axis=1
-    #)
 
-    if(VvT is None):
+    Uv = np.concatenate((lambda_x * IOmega, lambda_y * OmegaI), axis=1)
+    # Vv = np.concatenate(
+    #    (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)), axis=1
+    # )
+
+    if VvT is None:
         VvT = np.transpose(
             np.concatenate(
-             (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)), axis=1
+                (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)),
+                axis=1,
             )
         )
 
@@ -456,8 +469,23 @@ def L2d_inversion_viscosity_analytical(
     M: np.ndarray
         Mass matrix
     lambda_x, lambda_y: float
-        Ration between celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
+    Psi: np.ndarray or None
+        Eigenvalues
+    iR2d: np.ndarray or None
+        Kronecker product of the inverse of the right-eigenvector matrix by itself
+    iMR2d: np.ndarray or None
+        Kronecker product of the product of the inverse of the mass matrix by the
+        right-eigenvector matrix by itself
+    VvT: np.array or None
+        Matrix with sparse structure for 2D problems
+    invRROmega: np.array or None
+        kron(R^{-1}, R^{-1}.Omega), R being the right-eigenvector matrix and Omega the
+        Lobatto weights
+    invROmegaR: np.array or None
+        kron(R^{-1}.Omega, R^{-1}), R being the right-eigenvector matrix and Omega the
+        Lobatto weights
 
     Return:
         The inverse of the matrix
@@ -468,50 +496,43 @@ def L2d_inversion_viscosity_analytical(
     Psi = Psi if Psi is not None else eigen_L_analytical(D)
     Psi2d_diag = eigen_2D_diag(Psi, lambda_x, lambda_y)
 
-    if(R2d is None or iR2d is None):
+    if R2d is None or iR2d is None:
         R = R_matrix(D, Psi)
         invR = np.linalg.inv(R)
     R2d = R2d if R2d is not None else np.kron(R, R)
     iR2d = iR2d if iR2d is not None else np.kron(invR, invR)
-    
-    if(invRROmega is None or invROmegaR is None):
+
+    if invRROmega is None or invROmegaR is None:
         invROmega = np.dot(invR, LOBATTO_WEIGHTS_BY_ORDER[p].reshape((p + 1, 1)))
     invRROmega = invRROmega if invRROmega is not None else np.kron(invR, invROmega)
     invROmegaR = invROmegaR if invROmegaR is not None else np.kron(invROmega, invR)
 
     lbd = lambda_x + lambda_y
 
-    if(VvT is None):
+    if VvT is None:
         I = np.eye(p + 1)
         VvT = np.transpose(
             np.concatenate(
-             (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)), axis=1
+                (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)),
+                axis=1,
             )
         )
-    
+
     # Explicit diagonal block inversion
     # invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
     invdiagPsi = np.reciprocal(Psi2d_diag + 2 * d_min * lbd)
-    invL2d0 = np.dot(
-        R2d, diagonal_matrix_multiply(invdiagPsi, iR2d)
-    )
+    invL2d0 = np.dot(R2d, diagonal_matrix_multiply(invdiagPsi, iR2d))
 
     Z = np.dot(
         R2d,
         diagonal_matrix_multiply(
             invdiagPsi,
-            np.concatenate(
-                (
-                    lambda_x * invRROmega,
-                    lambda_y * invROmegaR,
-                ),
-                axis=1,
-            ),
+            np.concatenate((lambda_x * invRROmega, lambda_y * invROmegaR), axis=1),
         ),
     )
-    
-    #omega = LOBATTO_WEIGHTS_BY_ORDER[p].reshape((p + 1, 1))
-    #Z = np.dot(
+
+    # omega = LOBATTO_WEIGHTS_BY_ORDER[p].reshape((p + 1, 1))
+    # Z = np.dot(
     #    invL2d0,
     #    np.concatenate(
     #        (
@@ -520,21 +541,16 @@ def L2d_inversion_viscosity_analytical(
     #        ),
     #        axis=1,
     #    ),
-    #)
+    # )
 
     # M is diagonal, hence we M<kron>M is diagonal
     invMkM_diag = np.reciprocal(diagonal_auto_kron(np.diag(M)))
-    
+
     L2dV_explInv = diagonal_matrix_multiply(
         invMkM_diag,
         np.dot(
-            np.eye((p+1)*(p+1))
-            + np.dot(
-                Z,
-                np.dot(
-                    np.linalg.inv(np.eye(2 * p + 2) - np.dot(VvT, Z)), 
-                    VvT,
-                ),
+            diagonal_add(
+                np.dot(Z, np.linalg.solve(diagonal_add(-np.dot(VvT, Z)), VvT))
             ),
             invL2d0,
         ),
@@ -578,7 +594,7 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     p: int
         Polynomial order
     lambda_x, lambda_y: float
-        Ration between celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
 
     Return:
@@ -612,7 +628,7 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     p: int
         Polynomial order
     lambda_x, lambda_y: float
-        Ration between celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
 
     Return:
