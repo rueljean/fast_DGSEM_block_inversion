@@ -130,8 +130,6 @@ def diagonal_matrix_multiply(A_diag, B):
         Diagonal of first matrix
     B: np.ndarray
         Second matrix
-    invert_A: bool
-        Whether to invert A before multiplying
 
     Return: np.ndarray
         Result of the multiplication
@@ -142,17 +140,32 @@ def diagonal_matrix_multiply(A_diag, B):
 def diagonal_auto_kron(A_diag):
     """Let A be a diagonal matrix and A_diag its diagonal, this function compute
     np.diag(np.kron(A, A)) taking advantage of the structure of the matrix
+
+    A_diag: np.ndarray
+        Diagonal of the matrix
+
+    Return: np.ndarray
+        Equivalent of np.diag(np.kron(A, A))
     """
     # Vector-vector product, then flatten the resulting matrix
     return np.multiply(A_diag.reshape((A_diag.shape[0], -1)), A_diag).flatten()
 
 
-def diagonal_add(A, val=1):
+def diagonal_add(A, val=1.0):
     """Add `val` to the diagonal of `A`. Hence, `diagonal_add(A, 1)` is equivalent to
     adding the identity matrix to `A`
+
+    A: np.ndarray
+        Matrix
+    val: float or np.ndarray of the same size of np.diag(A), default: 1.0
+        Value(s) to add to the diagonal of A
+
+    Return: np.ndarray
+        Matrix A modified to have `val` added to its diagonal
     """
-    A[np.diag_indices_from(A)] += val
-    return A
+    ret = A.copy()
+    ret[np.diag_indices_from(ret)] += val
+    return ret
 
 
 def D_matrix(p):
