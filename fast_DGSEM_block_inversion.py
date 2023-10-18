@@ -425,7 +425,7 @@ def L2d_inversion_viscosity_numpy(
     IOmega = IOmega if IOmega is not None else np.kron(I, Omega)
     OmegaI = OmegaI if OmegaI is not None else np.kron(Omega, I)
 
-    Uv = np.concatenate((lambda_x * IOmega, lambda_y * OmegaI), axis=1)
+    Uv = 2 * d_min * np.concatenate((lambda_x * IOmega, lambda_y * OmegaI), axis=1)
     # Vv = np.concatenate(
     #    (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)), axis=1
     # )
@@ -523,7 +523,7 @@ def L2d_inversion_viscosity_analytical(
     invdiagPsi = np.reciprocal(Psi2d_diag + 2 * d_min * lbd)
     invL2d0 = np.dot(R2d, diagonal_matrix_multiply(invdiagPsi, iR2d))
 
-    Z = np.dot(
+    Z = 2 * d_min * np.dot(
         R2d,
         diagonal_matrix_multiply(
             invdiagPsi,
