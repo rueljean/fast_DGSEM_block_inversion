@@ -168,6 +168,26 @@ def diagonal_add(A, val=1.0):
     return ret
 
 
+def I_kron_mat(A, dim_I=None):
+    """Equivalent to `np.kron(I, A)`
+
+    A: np.ndarray
+        Matrix
+    dim_I: int or None
+        Dimension of I. If None, `A.shape[0]`
+
+    Return: np.ndarray
+        `np.kron(I, A)`
+    """
+    dim_I = dim_I if dim_I is not None else A.shape[0]
+    ret = np.zeros((dim_I * A.shape[0], dim_I * A.shape[1]))
+    for i in range(dim_I):
+        ret[
+            i * A.shape[0] : (i + 1) * A.shape[0], i * A.shape[1] : (i + 1) * A.shape[1]
+        ] = A
+    return ret
+
+
 def D_matrix(p):
     """Discrete derivative matrix
 
@@ -217,7 +237,7 @@ def L2d_matrix(D, lambda_x, lambda_y):
     I = np.eye(D.shape[0])
     L1d = diagonal_add(-2 * lbd * L_matrix(D))
 
-    L2d = lambda_x / lbd * np.kron(I, L1d) + lambda_y / lbd * np.kron(L1d, I)
+    L2d = lambda_x / lbd * I_kron_mat(L1d) + lambda_y / lbd * np.kron(L1d, I)
     return L2d
 
 
@@ -264,7 +284,7 @@ def eigen_2D(Psi, lambda_x, lambda_y):
     I = np.eye(Psi.shape[0])
     # Psi_lbd = I - 2 * lbd * np.diag(Psi)
     Psi_lbd = np.diag(1.0 - 2.0 * lbd * Psi)
-    Psi2d = lambda_x / lbd * np.kron(I, Psi_lbd) + lambda_y / lbd * np.kron(Psi_lbd, I)
+    Psi2d = lambda_x / lbd * I_kron_mat(Psi_lbd) + lambda_y / lbd * np.kron(Psi_lbd, I)
     return Psi2d
 
 
@@ -435,7 +455,7 @@ def L2d_inversion_viscosity_numpy(
 
     if IOmega is None or OmegaI is None:
         Omega = lobatto_weights.reshape((p + 1, 1))
-    IOmega = IOmega if IOmega is not None else np.kron(I, Omega)
+    IOmega = IOmega if IOmega is not None else I_kron_mat(Omega)
     OmegaI = OmegaI if OmegaI is not None else np.kron(Omega, I)
 
     Uv = 2 * d_min * np.concatenate((lambda_x * IOmega, lambda_y * OmegaI), axis=1)
@@ -446,7 +466,7 @@ def L2d_inversion_viscosity_numpy(
     if VvT is None:
         VvT = np.transpose(
             np.concatenate(
-                (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)),
+                (I_kron_mat(np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)),
                 axis=1,
             )
         )
@@ -526,7 +546,7 @@ def L2d_inversion_viscosity_analytical(
         I = np.eye(p + 1)
         VvT = np.transpose(
             np.concatenate(
-                (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)),
+                (I_kron_mat(np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)),
                 axis=1,
             )
         )

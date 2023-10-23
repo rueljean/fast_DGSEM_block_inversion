@@ -53,3 +53,10 @@ class TestMatrix:
         A = self.rng.random((self.N, self.N))
         d_val = val * np.ones(self.N) if val is not None else self.rng.random(self.N)
         assert np.allclose(f_dgsem.diagonal_add(A, d_val), A + np.diag(d_val))
+
+    @pytest.mark.parametrize("shape_A", [(3, 3), (3, 4)])
+    @pytest.mark.parametrize("dim_I", [None, 2, 5])
+    def test_I_kron_mat(self, shape_A, dim_I):
+        A = self.rng.random(shape_A)
+        I = np.eye(dim_I if dim_I is not None else shape_A[0])
+        assert np.allclose(f_dgsem.I_kron_mat(A, dim_I), np.kron(I, A))
