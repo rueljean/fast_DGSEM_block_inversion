@@ -167,6 +167,21 @@ def diagonal_add(A, val=1.0):
     ret[np.diag_indices_from(ret)] += val
     return ret
 
+def diagonal_solve(A_diag, b, inverted=False):
+    """Solve problem A.x=b when A is diagonal
+
+    A_diag: np.ndarray
+        Diagonal of the matrix composing the LHS of the system
+    b: np.ndarray
+        RHS of the system
+    inverted: bool, default: False
+        Whether `A_diag` is already inverted
+
+    Return: np.ndarray
+        Solution of A.x=b
+    """
+    return diagonal_matrix_multiply(A_diag if inverted else np.reciprocal(A_diag), b)
+
 
 def I_kron_mat(A, dim_I=None):
     """Equivalent to `np.kron(I, A)`
@@ -244,7 +259,7 @@ def L2d_matrix(D, lambda_x, lambda_y):
     lbd = lambda_x + lambda_y
 
     I = np.eye(D.shape[0])
-    L1d = diagonal_add(-2 * lbd * L_matrix(D))  # [MRR, B.3)
+    L1d = diagonal_add(-2 * lbd * L_matrix(D), 1.0)  # [MRR, B.3)
 
     L2d = lambda_x / lbd * I_kron_mat(L1d) + lambda_y / lbd * np.kron(L1d, I)
     return L2d
@@ -393,9 +408,7 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
     """
     L2d = L2d_matrix(D, lambda_x, lambda_y)  # [MRR, (B.7a)]
 
-    return diagonal_matrix_multiply(
-        np.reciprocal(diagonal_auto_kron(np.diag(M))), np.linalg.inv(L2d)
-    )
+    return diagonal_solve(diagonal_auto_kron(np.diag(M)), np.linalg.inv(L2d))
 
 
 def L2d_inversion_analytical(
@@ -436,15 +449,12 @@ def L2d_inversion_analytical(
     if iR2d is None or iMR2d is None:
         R = R_matrix(D, Psi)
         invR = np.linalg.inv(R)
-        invMR = diagonal_matrix_multiply(np.reciprocal(np.diag(M)), R)
+        invMR = diagonal_solve(np.diag(M), R)
 
     iMR2d = iMR2d if iMR2d is not None else np.kron(invMR, invMR)
     iR2d = iR2d if iR2d is not None else np.kron(invR, invR)
 
-    return np.dot(
-        iMR2d,
-        diagonal_matrix_multiply(np.reciprocal(Psi2d_diag), iR2d),
-    )
+    return np.dot(iMR2d, diagonal_solve(Psi2d_diag, iR2d))
 
 
 def L2d_inversion_viscosity_numpy(
@@ -518,10 +528,7 @@ def L2d_inversion_viscosity_numpy(
     L2dV = L2d0 - np.dot(Uv, VvT)
 
     # M is diagonal, hence we M<kron>M is diagonal
-    invMkM_diag = np.reciprocal(diagonal_auto_kron(np.diag(M)))
-    # Diagonal block inversion with numpy
-    L2dV_numpyInv = diagonal_matrix_multiply(invMkM_diag, np.linalg.inv(L2dV))
-    return L2dV_numpyInv
+    return diagonal_solve(diagonal_auto_kron(np.diag(M)), np.linalg.inv(L2dV))
 
 
 def L2d_inversion_viscosity_analytical(
@@ -604,7 +611,7 @@ def L2d_inversion_viscosity_analytical(
     invdiagPsi = np.reciprocal(Psi2d_diag + 2 * d_min * lbd)
 
     # See [MRR, (B.9b)]
-    invL2d0 = np.dot(R2d, diagonal_matrix_multiply(invdiagPsi, iR2d))
+    invL2d0 = np.dot(R2d, diagonal_solve(invdiagPsi, iR2d, True))
 
     # [MRR, (B.11b)]
     Z = (
@@ -612,9 +619,10 @@ def L2d_inversion_viscosity_analytical(
         * d_min
         * np.dot(
             R2d,
-            diagonal_matrix_multiply(
+            diagonal_solve(
                 invdiagPsi,
                 np.concatenate((lambda_x * invRROmega, lambda_y * invROmegaR), axis=1),
+                True,
             ),
         )
     )
@@ -631,18 +639,17 @@ def L2d_inversion_viscosity_analytical(
     #    ),
     # )
 
-    # M is diagonal, hence we M<kron>M is diagonal, first element of [MRR, (B.11d)]
-    invMkM_diag = np.reciprocal(diagonal_auto_kron(np.diag(M)))
-
-    L2dV_explInv = diagonal_matrix_multiply(
-        invMkM_diag,
+    # M is diagonal, hence we M<kron>M is diagonal, [MRR, (B.11d)]
+    L2dV_explInv = diagonal_solve(
+        diagonal_auto_kron(np.diag(M)),
         np.dot(
             diagonal_add(
                 np.dot(
                     Z,
                     # [MRR, (B.11c)]
-                    np.linalg.solve(diagonal_add(-np.dot(VvT, Z)), VvT),
-                )
+                    np.linalg.solve(diagonal_add(-np.dot(VvT, Z), 1.0), VvT),
+                ),
+                1.0,
             ),
             invL2d0,
         ),
