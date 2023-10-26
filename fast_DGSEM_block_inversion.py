@@ -138,7 +138,7 @@ def diagonal_matrix_multiply(A_diag, B):
 
 
 def diagonal_auto_kron(A_diag):
-    """Let A be a diagonal matrix and A_diag its diagonal, this function compute
+    """Let A be a diagonal matrix and A_diag its diagonal, this function computes
     np.diag(np.kron(A, A)) taking advantage of the structure of the matrix
 
     A_diag: np.ndarray
@@ -166,6 +166,7 @@ def diagonal_add(A, val=1.0):
     ret = A.copy()
     ret[np.diag_indices_from(ret)] += val
     return ret
+
 
 def diagonal_solve(A_diag, b, inverted=False):
     """Solve problem A.x=b when A is diagonal
@@ -459,7 +460,7 @@ def L2d_inversion_analytical(
 
 def L2d_inversion_viscosity_numpy(
     D,
-    M,
+    M2d_invdiag,
     lambda_x,
     lambda_y,
     VvT=None,
@@ -476,8 +477,9 @@ def L2d_inversion_viscosity_numpy(
         Polynomial order
     D: np.ndarray
         Derivative matrix [MRR, (B.1)]
-    M: np.ndarray
-        Mass matrix [MRR, (B.2)]
+    M2d_diag: np.ndarray
+        Diagonal of the 2D mass matrix `kron(M,M)`, where M is the 1D mass matrix
+        defined in  [MRR, (B.2)]
     lambda_x, lambda_y: float
         Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
@@ -528,12 +530,12 @@ def L2d_inversion_viscosity_numpy(
     L2dV = L2d0 - np.dot(Uv, VvT)
 
     # M is diagonal, hence we M<kron>M is diagonal
-    return diagonal_solve(diagonal_auto_kron(np.diag(M)), np.linalg.inv(L2dV))
+    return diagonal_solve(M2d_invdiag, np.linalg.inv(L2dV), True)
 
 
 def L2d_inversion_viscosity_analytical(
     D,
-    M,
+    M2d_invdiag,
     lambda_x,
     lambda_y,
     Psi=None,
@@ -553,26 +555,26 @@ def L2d_inversion_viscosity_analytical(
         Polynomial order
     D: np.ndarray
         Derivative matrix [MRR, (B.1)]
-    M: np.ndarray
-        Mass matrix [MRR, (B.2)]
+    M2d_invdiag: np.ndarray
+        Reciprocal of the diagonal of the 2D mass matrix `M<kron>M`, where M is the 1D
+        mass matrix defined in  [MRR, (B.2)]
     lambda_x, lambda_y: float
         Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
     Psi: np.ndarray or None
         Eigenvalues, see [MRR, (B.4)]
+    R2d: np.ndarray or None
+        Kronecker product of the right-eigenvector matrix by itself
     iR2d: np.ndarray or None
         Kronecker product of the inverse of the right-eigenvector matrix by itself
-    iMR2d: np.ndarray or None
-        Kronecker product of the product of the inverse of the mass matrix by the
-        right-eigenvector matrix by itself
     VvT: np.array or None
         Matrix with sparse structure for 2D problems [MRR, (B.9d)]
     invRROmega: np.array or None
-        kron(R^{-1}, R^{-1}.Omega), R being the right-eigenvector matrix and Omega the
-        Lobatto weights
+        `kron(R^{-1}, R^{-1}.Omega)`, R being the right-eigenvector matrix and Omega
+        the Lobatto weights
     invROmegaR: np.array or None
-        kron(R^{-1}.Omega, R^{-1}), R being the right-eigenvector matrix and Omega the
-        Lobatto weights
+        `kron(R^{-1}.Omega, R^{-1})`, R being the right-eigenvector matrix and Omega
+        the Lobatto weights
 
     Return:
         The inverse of the matrix
@@ -580,8 +582,13 @@ def L2d_inversion_viscosity_analytical(
     p = D.shape[0] - 1
     d_min = d_min_BY_ORDER[p]
 
+    lbd = lambda_x + lambda_y
+
     Psi = Psi if Psi is not None else eigen_L_analytical(D)
-    Psi2d_diag = eigen_2D_diag(Psi, lambda_x, lambda_y)
+    # Central element of RHS of [MRR, (B.8b)]
+    # Explicit diagonal block inversion
+    # invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
+    invdiagPsi = np.reciprocal(eigen_2D_diag(Psi, lambda_x, lambda_y) + 2 * d_min * lbd)
 
     if R2d is None or iR2d is None:
         R = R_matrix(D, Psi)
@@ -594,8 +601,6 @@ def L2d_inversion_viscosity_analytical(
     invRROmega = invRROmega if invRROmega is not None else np.kron(invR, invROmega)
     invROmegaR = invROmegaR if invROmegaR is not None else np.kron(invROmega, invR)
 
-    lbd = lambda_x + lambda_y
-
     if VvT is None:
         I = np.eye(p + 1)
         VvT = np.transpose(
@@ -604,11 +609,6 @@ def L2d_inversion_viscosity_analytical(
                 axis=1,
             )
         )
-
-    # Central element of RHS of [MRR, (B.8b)]
-    # Explicit diagonal block inversion
-    # invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
-    invdiagPsi = np.reciprocal(Psi2d_diag + 2 * d_min * lbd)
 
     # See [MRR, (B.9b)]
     invL2d0 = np.dot(R2d, diagonal_solve(invdiagPsi, iR2d, True))
@@ -641,7 +641,7 @@ def L2d_inversion_viscosity_analytical(
 
     # M is diagonal, hence we M<kron>M is diagonal, [MRR, (B.11d)]
     L2dV_explInv = diagonal_solve(
-        diagonal_auto_kron(np.diag(M)),
+        M2d_invdiag,
         np.dot(
             diagonal_add(
                 np.dot(
@@ -653,6 +653,7 @@ def L2d_inversion_viscosity_analytical(
             ),
             invL2d0,
         ),
+        True,
     )
 
     return L2dV_explInv
@@ -747,10 +748,12 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
 
     # Main matrices
     D = D_matrix(p)  # [MRR, B.1)
-    M = 0.5 * np.diag(lobatto_weights)  # [MRR, B.2)
+    M2d_invdiag = np.reciprocal(diagonal_auto_kron(0.5 * lobatto_weights))
 
-    L2dV_numpyInv = L2d_inversion_viscosity_numpy(D, M, lambda_x, lambda_y)
-    L2dV_explInv = L2d_inversion_viscosity_analytical(D, M, lambda_x, lambda_y)
+    L2dV_numpyInv = L2d_inversion_viscosity_numpy(D, M2d_invdiag, lambda_x, lambda_y)
+    L2dV_explInv = L2d_inversion_viscosity_analytical(
+        D, M2d_invdiag, lambda_x, lambda_y
+    )
 
     print(
         "Verification of diag. block inv. with graph visc. (difference inf. norm between the two methods): {}".format(

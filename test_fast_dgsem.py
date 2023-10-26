@@ -24,10 +24,14 @@ class TestMethods:
     @pytest.mark.parametrize("lambda_y", [1.0])
     def test_2D_inversion_viscosity(self, p, lambda_x, lambda_y):
         D = f_dgsem.D_matrix(p)
-        M = 0.5 * np.diag(f_dgsem.LOBATTO_WEIGHTS_BY_ORDER[p])
+        M2d_invdiag = np.reciprocal(
+            f_dgsem.diagonal_auto_kron(0.5 * f_dgsem.LOBATTO_WEIGHTS_BY_ORDER[p])
+        )
         assert np.allclose(
-            f_dgsem.L2d_inversion_viscosity_numpy(D, M, lambda_x, lambda_y),
-            f_dgsem.L2d_inversion_viscosity_analytical(D, M, lambda_x, lambda_y),
+            f_dgsem.L2d_inversion_viscosity_numpy(D, M2d_invdiag, lambda_x, lambda_y),
+            f_dgsem.L2d_inversion_viscosity_analytical(
+                D, M2d_invdiag, lambda_x, lambda_y
+            ),
         )
 
 
@@ -42,6 +46,17 @@ class TestMatrix:
         A = np.diag(diag)
         B = self.rng.random((self.N, self.N))
         assert np.allclose(f_dgsem.diagonal_matrix_multiply(diag, B), A.dot(B))
+
+    @pytest.mark.parametrize("diag_already_inverted", [False, True])
+    def test_diagonal_solve(self, diag_already_inverted):
+        diag = self.rng.random(self.N)
+        # If diag is already inverted, then remake it normal so that solve works
+        A = np.diag(np.reciprocal(diag) if diag_already_inverted else diag)
+        B = self.rng.random((self.N, self.N))
+        assert np.allclose(
+            f_dgsem.diagonal_solve(diag, B, diag_already_inverted),
+            np.linalg.solve(A, B),
+        )
 
     def test_diagonal_auto_kron(self):
         diag = self.rng.random(self.N)
