@@ -97,7 +97,7 @@ def lagrange_derivative(l, xi, pts):
     """Derivative of the l-th Lagrange polynomial at the point xi
 
     Reference:
-        RHS of [MRR, (B.1)]
+        RHS of [MRR, (7)]
 
     l: int
         Index of the desired polynomial
@@ -208,7 +208,7 @@ def D_matrix(p):
     """Discrete derivative matrix
 
     Reference:
-        [MRR, (B.1)]
+        [MRR, (7)]
 
     p: int
         Polynomial order
@@ -228,7 +228,7 @@ def L_matrix(D):
     """Compute matrix L using relying on matrix D
 
     Reference:
-        [MRR, (B.3)]
+        [MRR, (25)]
 
     D: np.ndarray
         Derivative matrix
@@ -246,10 +246,10 @@ def L2d_matrix(D, lambda_x, lambda_y):
     """Compute the matrix for 2D DGSEM systems
 
     Reference:
-        [MRR, (B.7a)]
+        [MRR, (44a)]
 
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
     lambda_x, lambda_y: float
         Celerity*time step over spatial grid size in, respectively, in x
         and y direction
@@ -260,7 +260,7 @@ def L2d_matrix(D, lambda_x, lambda_y):
     lbd = lambda_x + lambda_y
 
     I = np.eye(D.shape[0])
-    L1d = diagonal_add(-2 * lbd * L_matrix(D), 1.0)  # [MRR, B.3)
+    L1d = diagonal_add(-2 * lbd * L_matrix(D), 1.0)  # [MRR, (25)]
 
     L2d = lambda_x / lbd * I_kron_mat(L1d) + lambda_y / lbd * np.kron(L1d, I)
     return L2d
@@ -270,10 +270,10 @@ def R_matrix(D, psi):
     """Given the eigenvalues, compute the right-eigen-matrix
 
     Reference:
-        [MRR, (B.4-5)]
+        [MRR, (40-42)]
 
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
     psi: np.ndarray
         Eigenvalues
 
@@ -300,7 +300,7 @@ def eigen_2D(Psi, lambda_x, lambda_y):
 
     Reference:
         Although not explicitly detailed, one can grasp the intent of this function by
-        referring to [MRR, (B.7b,8b)]
+        referring to [MRR, (44b,45)]
 
     Psi: np.ndarray
         1D eigenvalues
@@ -325,7 +325,7 @@ def eigen_2D_diag(Psi, lambda_x, lambda_y):
 
     Reference:
         Although not explicitly detailed, one can grasp the intent of this function by
-        referring to [MRR, (B.7b,8b)]
+        referring to [MRR, (44b,45)]
 
     Psi: np.ndarray
         1D eigenvalues
@@ -346,10 +346,10 @@ def eigen_L_numpy(D):
     numpy functions
 
     Reference:
-        Solution of [MRR, (B.4)] using `numpy` tools
+        Solution of [MRR, (40)] using `numpy` tools
 
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
 
     Return:
         The eigenvalues
@@ -364,10 +364,10 @@ def eigen_L_analytical(D):
     numpy functions
 
     Reference:
-        Solution of [MRR, (B.4)] using [MRR, (B.5)]
+        Solution of [MRR, (40)] using [MRR, (42)]
 
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
 
     Return:
         The eigenvalues
@@ -394,12 +394,12 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
     """Invert 2D systems resulting from DGSEM problems with numpy function
 
     Reference:
-        Solve [MRR, (B.6)] using `numpy` tools
+        Compute LHS of [MRR, (45)] using `numpy` tools
 
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
     M: np.ndarray
-        Mass matrix [MRR, (B.2)]
+        Mass matrix, see [MRR, (18)]
     lambda_x, lambda_y: float
         Celerity*time step over spatial grid size in, respectively, in x
         and y direction
@@ -407,7 +407,7 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
     Return:
         The inverse of the 2D matrix
     """
-    L2d = L2d_matrix(D, lambda_x, lambda_y)  # [MRR, (B.7a)]
+    L2d = L2d_matrix(D, lambda_x, lambda_y)  # [MRR, (44a)]
 
     return diagonal_solve(diagonal_auto_kron(np.diag(M)), np.linalg.inv(L2d))
 
@@ -424,17 +424,17 @@ def L2d_inversion_analytical(
     """Invert 2D systems resulting from DGSEM problems with analytical method
 
     Reference:
-        Solve [MRR, (B.6)] using [MRR, (B.8)]
+        [MRR, (45)]
 
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
     M: np.ndarray
-        Mass matrix [MRR, (B.2)]
+        Mass matrix [MRR, (18)]
     lambda_x, lambda_y: float
         Celerity*time step over spatial grid size in, respectively, in x
         and y direction
     Psi: np.ndarray or None
-        Eigenvalues, see [MRR, (B.4)]
+        Eigenvalues, see [MRR, (40)]
     iR2d: np.ndarray or None
         Kronecker product of the inverse of the right-eigenvector matrix by itself
     iMR2d: np.ndarray or None
@@ -471,26 +471,26 @@ def L2d_inversion_viscosity_numpy(
     standard `numpy` functions
 
     Reference:
-        Solve [MRR, (B.10)] using `numpy` tools
+        Invert [MRR, (47)] using `numpy` tools
 
     p: int
         Polynomial order
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
     M2d_diag: np.ndarray
         Diagonal of the 2D mass matrix `kron(M,M)`, where M is the 1D mass matrix
-        defined in  [MRR, (B.2)]
+        defined in [MRR, (18)]
     lambda_x, lambda_y: float
         Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
     VvT: np.array or None
-        Matrix with sparse structure for 2D problems [MRR, (B.9d)]
+        Matrix with sparse structure for 2D problems, see right equation of [MRR, (48b)]
     IOmega: np.array or None
         Kronecker product of identity and Lobatto weights, first element of RHS of
-        [MRR, (B.9c)]
+        left equation of [MRR, (48b)]
     OmegaI: np.array or None
         Kronecker product of Lobatto weights and identity, second element of RHS of
-        [MRR, (B.9c)]
+        left equation of [MRR, (48b)]
 
     Return:
         The inverse of the matrix
@@ -503,7 +503,7 @@ def L2d_inversion_viscosity_numpy(
 
     I = np.eye(p + 1)
 
-    # [MRR, (B.9b)]
+    # [MRR, (48)]
     # L2d0 = L2d_matrix(D, lambda_x, lambda_y) + 2 * d_min * lbd * np.kron(I, I)
     L2d0 = diagonal_add(L2d_matrix(D, lambda_x, lambda_y), 2 * d_min * lbd)
 
@@ -512,7 +512,7 @@ def L2d_inversion_viscosity_numpy(
     IOmega = IOmega if IOmega is not None else I_kron_mat(Omega)
     OmegaI = OmegaI if OmegaI is not None else np.kron(Omega, I)
 
-    # [MRR, (B.9c)]
+    # Left part of [MRR, (48b)]
     Uv = 2 * d_min * np.concatenate((lambda_x * IOmega, lambda_y * OmegaI), axis=1)
     # Vv = np.concatenate(
     #    (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)), axis=1
@@ -526,7 +526,7 @@ def L2d_inversion_viscosity_numpy(
             )
         )
 
-    # [MRR, (B.9a)]
+    # [MRR, (47a)]
     L2dV = L2d0 - np.dot(Uv, VvT)
 
     # M is diagonal, hence we M<kron>M is diagonal
@@ -549,26 +549,26 @@ def L2d_inversion_viscosity_analytical(
     analytical formula
 
     Reference:
-        Solve [MRR, (B.10)] using [MRR, (B.11)]
+        Invert [MRR, (47)] using [MRR, Algorithm 1]
 
     p: int
         Polynomial order
     D: np.ndarray
-        Derivative matrix [MRR, (B.1)]
+        Derivative matrix [MRR, (7)]
     M2d_invdiag: np.ndarray
         Reciprocal of the diagonal of the 2D mass matrix `M<kron>M`, where M is the 1D
-        mass matrix defined in  [MRR, (B.2)]
+        mass matrix defined in  [MRR, (18)]
     lambda_x, lambda_y: float
         Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
     Psi: np.ndarray or None
-        Eigenvalues, see [MRR, (B.4)]
+        Eigenvalues, see [MRR, (40)]
     R2d: np.ndarray or None
         Kronecker product of the right-eigenvector matrix by itself
     iR2d: np.ndarray or None
         Kronecker product of the inverse of the right-eigenvector matrix by itself
     VvT: np.array or None
-        Matrix with sparse structure for 2D problems [MRR, (B.9d)]
+        Matrix with sparse structure for 2D problems, see right equation of [MRR, (48b)]
     invRROmega: np.array or None
         `kron(R^{-1}, R^{-1}.Omega)`, R being the right-eigenvector matrix and Omega
         the Lobatto weights
@@ -585,7 +585,7 @@ def L2d_inversion_viscosity_analytical(
     lbd = lambda_x + lambda_y
 
     Psi = Psi if Psi is not None else eigen_L_analytical(D)
-    # Central element of RHS of [MRR, (B.8b)]
+    # Inverse of the central element of RHS of [MRR, (48a)]
     # Explicit diagonal block inversion
     # invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
     invdiagPsi = np.reciprocal(eigen_2D_diag(Psi, lambda_x, lambda_y) + 2 * d_min * lbd)
@@ -610,10 +610,10 @@ def L2d_inversion_viscosity_analytical(
             )
         )
 
-    # See [MRR, (B.9b)]
+    # Invert of [MRR, (48a)], that is, [MRR, Algorithm 1 - step 1]
     invL2d0 = np.dot(R2d, diagonal_solve(invdiagPsi, iR2d, True))
 
-    # [MRR, (B.11b)]
+    # [MRR, Algorithm 1 - step 2]
     Z = (
         2
         * d_min
@@ -639,14 +639,14 @@ def L2d_inversion_viscosity_analytical(
     #    ),
     # )
 
-    # M is diagonal, hence we M<kron>M is diagonal, [MRR, (B.11d)]
+    # M is diagonal, hence we M<kron>M is diagonal, [MRR, Algorithm 1 - step 4]
     L2dV_explInv = diagonal_solve(
         M2d_invdiag,
         np.dot(
             diagonal_add(
                 np.dot(
                     Z,
-                    # [MRR, (B.11c)]
+                    # [MRR, Algorithm 1 - step 3]
                     np.linalg.solve(diagonal_add(-np.dot(VvT, Z), 1.0), VvT),
                 ),
                 1.0,
@@ -664,7 +664,7 @@ def compare_eigenvalues_computation(p):
     and analytical formula
 
     Reference:
-        Compare methods for solving [MRR, (B.4)]
+        Compare methods for solving [MRR, (40)]
 
     p: int
         Polynomial order
@@ -673,7 +673,7 @@ def compare_eigenvalues_computation(p):
         The eigenvalues
     """
     # Main matrix with derivatives
-    D = D_matrix(p)  # [MRR, B.1)
+    D = D_matrix(p)  # [MRR, (7)]
 
     # Computation of L eigenvalues and eigenvectors with numpy
     eigValNp = eigen_L_numpy(D)
@@ -695,7 +695,7 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     """Compare standard and fast methods to invert 2D systems resulting from DGSEM problems
 
     Reference:
-        Compare methods for solving [MRR, (B.6)]
+        Compare methods for computing LHS [MRR, (45)]
 
     p: int
         Polynomial order
@@ -710,8 +710,8 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     lobatto_weights = LOBATTO_WEIGHTS_BY_ORDER[p]
 
     # Main matrices
-    D = D_matrix(p)  # [MRR, B.1)
-    M = 0.5 * np.diag(lobatto_weights)  # [MRR, B.2)
+    D = D_matrix(p)  # [MRR, (7)]
+    M = 0.5 * np.diag(lobatto_weights)  # Mass matrix [MRR, (18)]
 
     # Diagonal block inversion with numpy
     L2d_numpyInv = L2d_inversion_numpy(D, M, lambda_x, lambda_y)
@@ -732,7 +732,7 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     problems with graph-viscosity
 
     Reference:
-        Compare methods for solving [MRR, (B.10)]
+        Compare methods for inverting [MRR, (47)]
 
     p: int
         Polynomial order
@@ -747,7 +747,7 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     lobatto_weights = LOBATTO_WEIGHTS_BY_ORDER[p]
 
     # Main matrices
-    D = D_matrix(p)  # [MRR, B.1)
+    D = D_matrix(p)  # [MRR, (7)]
     M2d_invdiag = np.reciprocal(diagonal_auto_kron(0.5 * lobatto_weights))
 
     L2dV_numpyInv = L2d_inversion_viscosity_numpy(D, M2d_invdiag, lambda_x, lambda_y)
