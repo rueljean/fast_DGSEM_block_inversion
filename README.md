@@ -1,5 +1,5 @@
 # Fast inversion of DGSEM blocks
-This repository provides a `python` implementation and performance analysis of the inversion strategies for diagonal dense blocks resulting from DGSEM (Discontinuous Galerkin Spectral Element Methods) proposed in paper "_Maximum principle preserving time implicit DGSEM for linear scalar hyperbolic conservation laws_" by Milani, Renac, and Ruel [MRR], more precisely, in its appendix "_Inversion of diagonal blocks_".
+This repository provides a `python` implementation and performance analysis of the inversion strategies for diagonal dense blocks resulting from DGSEM (Discontinuous Galerkin Spectral Element Methods) proposed in paper "_Maximum principle preserving time implicit DGSEM for linear scalar hyperbolic conservation laws_" by Milani, Renac, and Ruel [MRR].
 
 The repository contains three files:
 * [**`fast_DGSEM_block_inversion.py`**](fast_DGSEM_block_inversion.py): This `python` module provides the actual implementation of inversion strategies [MRR, (45)] and [MRR, Algorithm 1]. Caution has been paid to reference the function of the module with the equations of the above-mentioned paper. Secondly, the module also contains versions of standard matrix operations optimized for diagonal matrices. The only dependency is `numpy` which is also used as reference resolution method to which the optimized strategies are compared
