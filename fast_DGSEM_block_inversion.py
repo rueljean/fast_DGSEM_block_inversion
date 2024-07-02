@@ -106,15 +106,15 @@ def lagrange_derivative(l, xi, pts):
         Lagrangian points
     """
     n = len(pts)
-    c = 1
-    for i in range(0, n):
+    c = 1.0
+    for i in range(n):
         if i != l:
             c *= pts[l] - pts[i]
-    p = 0
-    for i in range(0, n):
+    p = 0.0
+    for i in range(n):
         if i != l:
-            t = 1
-            for j in range(0, n):
+            t = 1.0
+            for j in range(n):
                 if j != l and j != i:
                     t *= xi - pts[j]
             p += t
@@ -136,6 +136,21 @@ def diagonal_matrix_multiply(A_diag, B):
     return A_diag[:, None] * B
 
 
+def diagonal_matrix_multiply_right(A, B_diag):
+    """Fast way to compute A.B whenever B is diagonal.
+    Adapted from https://stackoverflow.com/a/44388621/12152457
+
+    A: np.ndarray
+        First matrix
+    B_diag: np.ndarray
+        Diagonal of second matrix
+
+    Return: np.ndarray
+        Result of the multiplication
+    """
+    return A * B_diag[None, :]
+
+
 def diagonal_auto_kron(A_diag):
     """Let A be a diagonal matrix and A_diag its diagonal, this function computes
     np.diag(np.kron(A, A)) taking advantage of the structure of the matrix
@@ -147,7 +162,8 @@ def diagonal_auto_kron(A_diag):
         Equivalent of np.diag(np.kron(A, A))
     """
     # Vector-vector product, then flatten the resulting matrix
-    return np.multiply(A_diag.reshape((A_diag.shape[0], -1)), A_diag).flatten()
+    # return np.multiply(A_diag.reshape((A_diag.shape[0], -1)), A_diag).flatten()
+    return np.outer(A_diag, A_diag).flatten()
 
 
 def diagonal_add(A, val=1.0):
@@ -180,7 +196,10 @@ def diagonal_solve(A_diag, b, inverted=False):
     Return: np.ndarray
         Solution of A.x=b
     """
-    return diagonal_matrix_multiply(A_diag if inverted else np.reciprocal(A_diag), b)
+    A_inv = A_diag if inverted else np.reciprocal(A_diag)
+    if len(b.shape) == 1:
+        return A_inv * b
+    return diagonal_matrix_multiply(A_inv, b)
 
 
 def I_kron_mat(A, dim_I=None):
@@ -201,6 +220,30 @@ def I_kron_mat(A, dim_I=None):
             i * A.shape[0] : (i + 1) * A.shape[0], i * A.shape[1] : (i + 1) * A.shape[1]
         ] = A
     return ret
+
+
+def mass_matrix(p):
+    """Compute the mass matrix of a 1D DGSEM discretization.
+
+    Reference:
+        [MRR, (17)]
+
+    p: int
+        Polynomial order
+    """
+    return 0.5 * np.diag(LOBATTO_WEIGHTS_BY_ORDER[p])
+
+
+def mass_matrix_diag(p):
+    """Compute the diagonal of the mass matrix of a 1D DGSEM discretization.
+
+    Reference:
+        [MRR, (17)]
+
+    p: int
+        Polynomial order
+    """
+    return 0.5 * np.asarray(LOBATTO_WEIGHTS_BY_ORDER[p])
 
 
 def D_matrix(p):
@@ -224,7 +267,7 @@ def D_matrix(p):
 
 
 def L_matrix(D):
-    """Compute matrix L using relying on matrix D
+    """Compute matrix L relying on matrix D
 
     Reference:
         Second term of [MRR, (24)]
@@ -236,9 +279,9 @@ def L_matrix(D):
         The matrix
     """
     p = D.shape[0] - 1
-    A = np.zeros_like(D)
-    A[-1, -1] = 1.0
-    return D.T - A / LOBATTO_WEIGHTS_BY_ORDER[p][p]
+    L = D.T.copy()
+    L[-1, -1] -= 1.0 / LOBATTO_WEIGHTS_BY_ORDER[p][p]
+    return L
 
 
 def L2d_matrix(D, lambda_x, lambda_y):
@@ -250,7 +293,7 @@ def L2d_matrix(D, lambda_x, lambda_y):
     D: np.ndarray
         Derivative matrix [MRR, (6)]
     lambda_x, lambda_y: float
-        Celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
 
     Return:
@@ -304,7 +347,7 @@ def eigen_2D(Psi, lambda_x, lambda_y):
     Psi: np.ndarray
         1D eigenvalues
     lambda_x, lambda_y: float
-        Celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
 
     Return:
@@ -329,7 +372,7 @@ def eigen_2D_diag(Psi, lambda_x, lambda_y):
     Psi: np.ndarray
         1D eigenvalues
     lambda_x, lambda_y: float
-        Celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
 
     Return:
@@ -389,7 +432,7 @@ def eigen_L_analytical(D):
     return Psi
 
 
-def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
+def L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y):
     """Invert 2D systems resulting from DGSEM problems with numpy function
 
     Reference:
@@ -397,10 +440,10 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
-    M: np.ndarray
-        Mass matrix, see [MRR, (17)]
+    M_diag: np.ndarray
+        Diagonal of the mass matrix, see [MRR, (17)]
     lambda_x, lambda_y: float
-        Celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
 
     Return:
@@ -408,12 +451,12 @@ def L2d_inversion_numpy(D, M, lambda_x, lambda_y):
     """
     L2d = L2d_matrix(D, lambda_x, lambda_y)  # First term of [MRR, (42)]
 
-    return diagonal_solve(diagonal_auto_kron(np.diag(M)), np.linalg.inv(L2d))
+    return diagonal_solve(diagonal_auto_kron(M_diag), np.linalg.inv(L2d))
 
 
 def L2d_inversion_analytical(
     D,
-    M,
+    M_diag,
     lambda_x,
     lambda_y,
     Psi=None,
@@ -427,10 +470,10 @@ def L2d_inversion_analytical(
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
-    M: np.ndarray
-        Mass matrix [MRR, (17)]
+    M_diag: np.ndarray
+        Diagonal of the mass matrix, see [MRR, (17)]
     lambda_x, lambda_y: float
-        Celerity*time step over spatial grid size in, respectively, in x
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
     Psi: np.ndarray or None
         Eigenvalues, see [MRR, (38)]
@@ -449,7 +492,7 @@ def L2d_inversion_analytical(
     if iR2d is None or iMR2d is None:
         R = R_matrix(D, Psi)
         invR = np.linalg.inv(R)
-        invMR = diagonal_solve(np.diag(M), R)
+        invMR = diagonal_solve(M_diag, R)
 
     iMR2d = iMR2d if iMR2d is not None else np.kron(invMR, invMR)
     iR2d = iR2d if iR2d is not None else np.kron(invR, invR)
@@ -476,9 +519,9 @@ def L2d_inversion_viscosity_numpy(
         Polynomial order
     D: np.ndarray
         Derivative matrix [MRR, (6)]
-    M2d_diag: np.ndarray
-        Diagonal of the 2D mass matrix `kron(M,M)`, where M is the 1D mass matrix
-        defined in [MRR, (17)]
+    M2d_invdiag: np.ndarray
+        Reciprocal of the diagonal of the 2D mass matrix `M<kron>M`, where M is the 1D
+        mass matrix defined in  [MRR, (17)]
     lambda_x, lambda_y: float
         Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
@@ -640,7 +683,7 @@ def L2d_inversion_viscosity_analytical(
     #    ),
     # )
 
-    # M is diagonal, hence we M<kron>M is diagonal, [MRR, Algorithm 1 - step 4]
+    # M is diagonal, hence M<kron>M is diagonal, [MRR, Algorithm 1 - step 4]
     L2dV_explInv = diagonal_solve(
         M2d_invdiag,
         np.dot(
@@ -708,17 +751,15 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
         The inverse of the 2D matrix
     """
 
-    lobatto_weights = LOBATTO_WEIGHTS_BY_ORDER[p]
-
     # Main matrices
     D = D_matrix(p)  # [MRR, (6)]
-    M = 0.5 * np.diag(lobatto_weights)  # Mass matrix [MRR, (17)]
+    M_diag = mass_matrix_diag(p)  # [MRR, (17)]
 
     # Diagonal block inversion with numpy
-    L2d_numpyInv = L2d_inversion_numpy(D, M, lambda_x, lambda_y)
+    L2d_numpyInv = L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y)
 
     # Explicit diagonal block inversion
-    L2d_explInv = L2d_inversion_analytical(D, M, lambda_x, lambda_y)
+    L2d_explInv = L2d_inversion_analytical(D, M_diag, lambda_x, lambda_y)
 
     print(
         "Verification of diag. block inv. (difference inf. norm between the two methods): {}\n".format(
@@ -745,11 +786,9 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
         The inverse of the matrix
     """
 
-    lobatto_weights = LOBATTO_WEIGHTS_BY_ORDER[p]
-
     # Main matrices
     D = D_matrix(p)  # [MRR, (6)]
-    M2d_invdiag = np.reciprocal(diagonal_auto_kron(0.5 * lobatto_weights))
+    M2d_invdiag = np.reciprocal(diagonal_auto_kron(mass_matrix_diag(p)))
 
     L2dV_numpyInv = L2d_inversion_viscosity_numpy(D, M2d_invdiag, lambda_x, lambda_y)
     L2dV_explInv = L2d_inversion_viscosity_analytical(
