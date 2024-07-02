@@ -10,6 +10,10 @@ there, e.g., see [MRR, (B.1)].
 One of the goals of the module is also to check the exactness of the original inversion
 strategies with respect to standard algebraic tools (i.e., `numpy`): see the `__main__`
 function and functions called therein.
+
+The module also proposes a further improved method using the ideas from R. Lynch, J.
+Rice, and D. Thomas, "Direct Solution of Partial Difference Equations by Tensor Product
+Methods", Numerische Mathematik, 6 (1964), pp. 185–199 [LRT].
 """
 
 import math
@@ -362,7 +366,7 @@ def eigen_2D(Psi, lambda_x, lambda_y):
     return Psi2d
 
 
-def eigen_2D_diag(Psi, lambda_x, lambda_y):
+def eigen_2D_diag(Psi, lambda_x, lambda_y, as_array=True):
     """Given the 1D ones, compute the 2D eigen-values
 
     Reference:
@@ -381,6 +385,52 @@ def eigen_2D_diag(Psi, lambda_x, lambda_y):
     return 1.0 - 2.0 * np.array(
         [lambda_x * p_i + lambda_y * p_j for p_j in Psi for p_i in Psi]
     )
+
+
+def fast_diagonalization_method(P, Q, L_inv, rhs, invP=None, invQ=None):
+    """Solve a problem of the form
+    ```math
+    (I \kron A + B \kron I) x = rhs
+    ```
+    following section 3 of Lynch et al, "Direct Solution of Partial Difference Equations
+    by Tensor Product Methods", Numerische Mathematik, 6 (1964), pp. 185–199. More
+    particularly, this function performs eq. (3.9)
+    ```math
+    x = [(P \kron Q).L.(P^{-1} \ kron Q^{-1})] rhs
+    ```
+    following steps (3.12)-(3.15).
+
+    Note:
+        The rhs should already be in matrix form.
+
+    P: np.ndarray
+        Diagonalization matrix for A
+    Q: np.ndarray
+        Diagonalization matrix for B
+    L_inv: np.ndarray
+        Reciprocal of the eigenvalues matrix. It should already be in the final form
+        combining both sets of eigenvalues.
+    rhs: np.ndarray
+        Right-hand side of the system (in matrix form)
+    invP: np.ndarray or None. Default: None
+        Inverse of `P`. If not provided, computed
+    invQ: np.ndarray or None. Default: None
+        Inverse of `Q`. If not provided, computed
+
+    Return:
+        np.ndarray with the solution
+    """
+    if invP is None:
+        invP = np.linalg.inv(P)
+    if invQ is None:
+        invQ = np.linalg.inv(Q)
+    # We use in the actual code below a concise formula, but for the sake of the
+    # example, we give here the step-by-step computation of the original paper
+    # R = rhs.dot(invQ.T)  # [LRT, (3.12)]
+    # S = L_diag_inv * invP.dot(R)  # [LRT, (3.13)]
+    # T = S.dot(Q.T)  # [LRT, (3.14)]
+    # U = P.dot(T)  # [LRT, (3.15)]
+    return P.dot(np.dot(L_inv * invP.dot(rhs.dot(invQ.T)), Q.T))
 
 
 def eigen_L_numpy(D):
@@ -498,6 +548,76 @@ def L2d_inversion_analytical(
     iR2d = iR2d if iR2d is not None else np.kron(invR, invR)
 
     return np.dot(iMR2d, diagonal_solve(Psi2d_diag, iR2d))
+
+
+def L2d_inversion_analytical_FDM(
+    D,
+    M_diag,
+    lambda_x,
+    lambda_y,
+    rhs,
+    Psi=None,
+    R=None,
+    invR=None,
+    invM_R=None,
+):
+    """Invert 2D systems resulting from DGSEM problems with analytical method using Fast
+    Diagonalization Method of [LRT, Sect. 3].
+
+    Reference:
+        [MRR, (45)]
+
+    D: np.ndarray
+        Derivative matrix [MRR, (6)]
+    M_diag: np.ndarray
+        Diagonal of the mass matrix, see [MRR, (17)]
+    lambda_x, lambda_y: float
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
+        and y direction
+    rhs: np.ndarray
+        Right-hand side of the problem in matrix form
+    Psi: np.ndarray or None
+        Eigenvalues, see [MRR, (38)]
+    R: np.ndarray or None
+        Right-eigenvector matrix
+    invR: np.ndarray or None
+        Inverse of the right-eigenvector matrix
+    invM_R: np.ndarray or None
+        Product of the inverse of the mass matrix and the right-eigenvector matrix
+
+    Return:
+        The solution of the problem
+    """
+    Psi = Psi if Psi is not None else eigen_L_analytical(D)
+    Psi2d_diag_inv = np.reciprocal(eigen_2D_diag(Psi, lambda_x, lambda_y)).reshape(
+        D.shape, order="F"
+    )
+
+    if R is None:
+        R = R_matrix(D, Psi)
+        invR = np.linalg.inv(R)
+        invM_R = diagonal_solve(M_diag, R)
+    else:
+        if invR is None:
+            invR = np.linalg.inv(R)
+        if invM_R is None:
+            invM_R = diagonal_solve(M_diag, R)
+
+    # METHOD 1: Usual FDM than solve (M \kron M)
+    # See first term of [MRR, (42)]
+    # L2d_inv = fast_diagonalization_method(R, R, Psi2d_diag_inv, rhs, invR, invR)
+    # With FDM, we have seen that (P \kron Q).a can be obtained with P.A.Q^T where A is
+    # the matrix form of a.
+    # Here, we have to solve for (M \kron M), with M diagonal. Hence, it's equivalent to
+    # a left multiplication by (M^{-1} \kron M^{-1}). Hence, M^{-1}.A.M^{-T}
+    # M_diag_inv = np.reciprocal(M_diag)
+    # return diagonal_matrix_multiply(
+    #     M_diag_inv, diagonal_matrix_multiply_right(L2d_inv, M_diag_inv)
+    # )
+
+    # METHOD 2: include the inversion by M in the FDM, however we tricked it, since
+    # what we pass as P^{-1} is not exactly the inverse of what we pass as P.
+    return fast_diagonalization_method(invM_R, invM_R, Psi2d_diag_inv, rhs, invR, invR)
 
 
 def L2d_inversion_viscosity_numpy(
@@ -728,7 +848,7 @@ def compare_eigenvalues_computation(p):
     # print("L eigenval.with numpy: {}".format(eigValNp))
     # print("Semi-analytical L eigenval.: {}\n".format(Psi))
     print(
-        "Verification of L eigenvalues (difference inf. norm between the two methods): {}\n".format(
+        "Verification of L eigenvalues (norm of the difference between the two methods): {}\n".format(
             np.linalg.norm(eigValNp - Psi)
         )
     )
@@ -762,8 +882,35 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     L2d_explInv = L2d_inversion_analytical(D, M_diag, lambda_x, lambda_y)
 
     print(
-        "Verification of diag. block inv. (difference inf. norm between the two methods): {}\n".format(
+        "Verification of diag. block inv. (norm of the difference between the two methods): {}".format(
             np.linalg.norm(L2d_numpyInv - L2d_explInv)
+        )
+    )
+
+    ##############################################
+    # Comparison using Fast Diagonalization Method
+    ##############################################
+    # To choose a common rhs, we compute the matrix and choose a random solution
+    ref_sol = np.random.rand((p + 1) ** 2)
+    # See first term of [MRR, (41)]
+    ref_mat = diagonal_matrix_multiply_right(
+        L2d_matrix(D, lambda_x, lambda_y), diagonal_auto_kron(M_diag)
+    )
+    ref_rhs = ref_mat.dot(ref_sol)
+
+    sol_numpy = L2d_numpyInv.dot(ref_rhs)
+    sol_FDM = L2d_inversion_analytical_FDM(
+        D, M_diag, lambda_x, lambda_y, ref_rhs.reshape(D.shape, order="F")
+    ).flatten(order="F")
+    print("Verification of solutions:")
+    print(
+        "  - Norm of the difference between the two methods: {}".format(
+            np.linalg.norm(sol_numpy - sol_FDM)
+        )
+    )
+    print(
+        "  - Norm of the difference wrt reference solution: {}\n".format(
+            np.linalg.norm(ref_sol - sol_FDM)
         )
     )
     return L2d_numpyInv
@@ -796,7 +943,7 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     )
 
     print(
-        "Verification of diag. block inv. with graph visc. (difference inf. norm between the two methods): {}".format(
+        "Verification of diag. block inv. with graph visc. (norm of the difference between the two methods): {}".format(
             np.linalg.norm(L2dV_numpyInv - L2dV_explInv)
         )
     )

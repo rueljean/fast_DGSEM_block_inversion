@@ -6,6 +6,9 @@ import fast_DGSEM_block_inversion as f_dgsem
 
 @pytest.mark.parametrize("p", [2, 3, 4, 5, 6], ids=lambda p: f"Order: {p}")
 class TestMethods:
+    # Default random number generator
+    rng = np.random.default_rng()
+
     def test_eigen(self, p):
         D = f_dgsem.D_matrix(p)
         assert np.allclose(f_dgsem.eigen_L_numpy(D), f_dgsem.eigen_L_analytical(D))
@@ -18,6 +21,27 @@ class TestMethods:
         assert np.allclose(
             f_dgsem.L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y),
             f_dgsem.L2d_inversion_analytical(D, M_diag, lambda_x, lambda_y),
+        )
+
+    def get_random_rhs(self, D, M_diag, lambda_x, lambda_y):
+        # To choose a common rhs, we compute the matrix and choose a random solution
+        mat = f_dgsem.diagonal_matrix_multiply_right(
+            f_dgsem.L2d_matrix(D, lambda_x, lambda_y),
+            f_dgsem.diagonal_auto_kron(M_diag),
+        )
+        return mat.dot(self.rng.random(mat.shape[-1]))
+
+    @pytest.mark.parametrize("lambda_x", [1.0, 2.0], ids=lambda l: f"Lambda x: {l}")
+    @pytest.mark.parametrize("lambda_y", [1.0], ids=lambda l: f"Lambda y: {l}")
+    def test_2D_solution(self, p, lambda_x, lambda_y):
+        D = f_dgsem.D_matrix(p)
+        M_diag = f_dgsem.mass_matrix_diag(p)
+        rhs = self.get_random_rhs(D, M_diag, lambda_x, lambda_y)
+        assert np.allclose(
+            np.dot(f_dgsem.L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y), rhs),
+            f_dgsem.L2d_inversion_analytical_FDM(
+                D, M_diag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
+            ).flatten(order="F"),
         )
 
     @pytest.mark.parametrize("lambda_x", [1.0, 2.0], ids=lambda l: f"Lambda x: {l}")
