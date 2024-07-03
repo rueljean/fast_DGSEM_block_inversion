@@ -945,6 +945,75 @@ def L2d_inversion_viscosity_analytical_FDM(
     )
 
 
+def get_random_rhs_2D_inversion(D, M_diag, lambda_x, lambda_y):
+    r"""Get a rhs for the problem [MRR, (43)], `L_{2d}(M \ kron M)x=rhs`. The idea is to
+    build the matrix, generate a random `x` and compute the rhs accordingly.
+
+    D: np.ndarray
+        Derivative matrix [MRR, (6)]
+    M_diag: np.ndarray
+        Diagonal of the mass matrix, see [MRR, (17)]
+    lambda_x, lambda_y: float
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
+        and y direction
+
+    Return:
+        A vector to be used as rhs and the solution
+    """
+    # To choose a common rhs, we compute the matrix and choose a random solution
+    # Building the inverse matrix
+    mat = diagonal_matrix_multiply_right(
+        L2d_matrix(D, lambda_x, lambda_y), diagonal_auto_kron(M_diag)
+    )
+    sol = np.random.rand(mat.shape[-1])
+    return mat @ sol, sol
+
+
+def get_random_rhs_2D_inversion_visosity(D, M_diag, lambda_x, lambda_y):
+    r"""Get a rhs for the problem [MRR, (45)], `L^{v}_{2d}(M \ kron M)x=rhs`. The idea is
+    to build the matrix, generate a random `x` and compute the rhs accordingly.
+
+    D: np.ndarray
+        Derivative matrix [MRR, (6)]
+    M_diag: np.ndarray
+        Diagonal of the mass matrix, see [MRR, (17)]
+    lambda_x, lambda_y: float
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
+        and y direction
+
+    Return:
+        A vector to be used as rhs
+    """
+    p = D.shape[0] - 1
+    d_min = d_min_BY_ORDER[p]
+    # See [MRR, (45-46)]
+    Omega = np.asarray(LOBATTO_WEIGHTS_BY_ORDER[p]).reshape((p + 1, 1))
+    Uv = (
+        2
+        * d_min
+        * np.concatenate(
+            (lambda_x * I_kron_mat(Omega), lambda_y * np.kron(Omega, np.eye(*D.shape))),
+            axis=1,
+        )
+    )
+    Vv = np.concatenate(
+        (
+            I_kron_mat(np.ones((p + 1, 1))),
+            np.kron(np.ones((p + 1, 1)), np.eye(*D.shape)),
+        ),
+        axis=1,
+    )
+    mat = diagonal_matrix_multiply_right(
+        diagonal_add(
+            L2d_matrix(D, lambda_x, lambda_y), 2 * d_min * (lambda_x + lambda_y)
+        )
+        - Uv @ Vv.T,
+        diagonal_auto_kron(M_diag),
+    )
+    sol = np.random.rand(mat.shape[-1])
+    return mat @ sol, sol
+
+
 def compare_eigenvalues_computation(p):
     """Compare the computation of the eigenvalues of the L matrix with numpy function
     and analytical formula
@@ -1012,17 +1081,10 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     ##############################################
     # Comparison using Fast Diagonalization Method
     ##############################################
-    # To choose a common rhs, we compute the matrix and choose a random solution
-    ref_sol = np.random.rand((p + 1) ** 2)
-    # See first term of [MRR, (41)]
-    ref_mat = diagonal_matrix_multiply_right(
-        L2d_matrix(D, lambda_x, lambda_y), diagonal_auto_kron(M_diag)
-    )
-    ref_rhs = ref_mat @ ref_sol
-
-    sol_numpy = L2d_numpyInv @ ref_rhs
+    rhs, sol_ref = get_random_rhs_2D_inversion(D, M_diag, lambda_x, lambda_y)
+    sol_numpy = L2d_numpyInv @ rhs
     sol_FDM = L2d_inversion_analytical_FDM(
-        D, M_diag, lambda_x, lambda_y, ref_rhs.reshape(D.shape, order="F")
+        D, M_diag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
     ).flatten(order="F")
     print("Verification of solutions:")
     print(
@@ -1032,7 +1094,7 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     )
     print(
         "  - Norm of the difference wrt reference solution: {}\n".format(
-            np.linalg.norm(ref_sol - sol_FDM)
+            np.linalg.norm(sol_ref - sol_FDM)
         )
     )
     return L2d_numpyInv
@@ -1073,38 +1135,10 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     ##############################################
     # Comparison using Fast Diagonalization Method
     ##############################################
-    # To choose a common rhs, we compute the matrix and choose a random solution
-    ref_sol = np.random.rand((p + 1) ** 2)
-    d_min = d_min_BY_ORDER[p]
-    # See [MRR, (46-48)]
-    Omega = np.asarray(LOBATTO_WEIGHTS_BY_ORDER[p]).reshape((p + 1, 1))
-    Uv = (
-        2
-        * d_min
-        * np.concatenate(
-            (lambda_x * I_kron_mat(Omega), lambda_y * np.kron(Omega, np.eye(*D.shape))),
-            axis=1,
-        )
-    )
-    Vv = np.concatenate(
-        (
-            I_kron_mat(np.ones((p + 1, 1))),
-            np.kron(np.ones((p + 1, 1)), np.eye(*D.shape)),
-        ),
-        axis=1,
-    )
-    ref_mat = diagonal_matrix_multiply_right(
-        diagonal_add(
-            L2d_matrix(D, lambda_x, lambda_y), 2 * d_min * (lambda_x + lambda_y)
-        )
-        - Uv @ Vv.T,
-        diagonal_auto_kron(M_diag),
-    )
-    ref_rhs = ref_mat @ ref_sol
-
-    sol_numpy = L2dV_numpyInv @ ref_rhs
+    rhs, sol_ref = get_random_rhs_2D_inversion_visosity(D, M_diag, lambda_x, lambda_y)
+    sol_numpy = L2dV_numpyInv @ rhs
     sol_FDM = L2d_inversion_viscosity_analytical_FDM(
-        D, M2d_invdiag, lambda_x, lambda_y, ref_rhs.reshape(D.shape, order="F")
+        D, M2d_invdiag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
     )
     print("Verification of solutions:")
     print(
@@ -1114,7 +1148,7 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     )
     print(
         "  - Norm of the difference wrt reference solution: {}\n".format(
-            np.linalg.norm(ref_sol - sol_FDM)
+            np.linalg.norm(sol_ref - sol_FDM)
         )
     )
 

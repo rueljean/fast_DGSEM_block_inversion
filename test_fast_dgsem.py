@@ -23,20 +23,12 @@ class TestMethods:
             f_dgsem.L2d_inversion_analytical(D, M_diag, lambda_x, lambda_y),
         )
 
-    def get_random_rhs(self, D, M_diag, lambda_x, lambda_y):
-        # To choose a common rhs, we compute the matrix and choose a random solution
-        mat = f_dgsem.diagonal_matrix_multiply_right(
-            f_dgsem.L2d_matrix(D, lambda_x, lambda_y),
-            f_dgsem.diagonal_auto_kron(M_diag),
-        )
-        return mat @ self.rng.random(mat.shape[-1])
-
     @pytest.mark.parametrize("lambda_x", [1.0, 2.0], ids=lambda l: f"Lambda x: {l}")
     @pytest.mark.parametrize("lambda_y", [1.0], ids=lambda l: f"Lambda y: {l}")
     def test_2D_solution(self, p, lambda_x, lambda_y):
         D = f_dgsem.D_matrix(p)
         M_diag = f_dgsem.mass_matrix_diag(p)
-        rhs = self.get_random_rhs(D, M_diag, lambda_x, lambda_y)
+        rhs, _ = f_dgsem.get_random_rhs_2D_inversion(D, M_diag, lambda_x, lambda_y)
         assert np.allclose(
             f_dgsem.L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y) @ rhs,
             f_dgsem.L2d_inversion_analytical_FDM(
@@ -58,47 +50,15 @@ class TestMethods:
             ),
         )
 
-    def get_random_rhs_viscosity(self, D, M_diag, lambda_x, lambda_y):
-        # To choose a common rhs, we compute the matrix and choose a random solution
-        p = D.shape[0] - 1
-        d_min = f_dgsem.d_min_BY_ORDER[p]
-        # See [MRR, (46-48)]
-        Omega = np.asarray(f_dgsem.LOBATTO_WEIGHTS_BY_ORDER[p]).reshape((p + 1, 1))
-        Uv = (
-            2
-            * d_min
-            * np.concatenate(
-                (
-                    lambda_x * f_dgsem.I_kron_mat(Omega),
-                    lambda_y * np.kron(Omega, np.eye(*D.shape)),
-                ),
-                axis=1,
-            )
-        )
-        Vv = np.concatenate(
-            (
-                f_dgsem.I_kron_mat(np.ones((p + 1, 1))),
-                np.kron(np.ones((p + 1, 1)), np.eye(*D.shape)),
-            ),
-            axis=1,
-        )
-        mat = f_dgsem.diagonal_matrix_multiply_right(
-            f_dgsem.diagonal_add(
-                f_dgsem.L2d_matrix(D, lambda_x, lambda_y),
-                2 * d_min * (lambda_x + lambda_y),
-            )
-            - Uv @ Vv.T,
-            f_dgsem.diagonal_auto_kron(M_diag),
-        )
-        return mat @ self.rng.random(mat.shape[-1])
-
     @pytest.mark.parametrize("lambda_x", [1.0, 2.0], ids=lambda l: f"Lambda x: {l}")
     @pytest.mark.parametrize("lambda_y", [1.0], ids=lambda l: f"Lambda y: {l}")
     def test_2D_solution_viscosity(self, p, lambda_x, lambda_y):
         D = f_dgsem.D_matrix(p)
         M_diag = f_dgsem.mass_matrix_diag(p)
         M2d_invdiag = np.reciprocal(f_dgsem.diagonal_auto_kron(M_diag))
-        rhs = self.get_random_rhs_viscosity(D, M_diag, lambda_x, lambda_y)
+        rhs, _ = f_dgsem.get_random_rhs_2D_inversion_visosity(
+            D, M_diag, lambda_x, lambda_y
+        )
         assert np.allclose(
             f_dgsem.L2d_inversion_viscosity_numpy(D, M2d_invdiag, lambda_x, lambda_y)
             @ rhs,
