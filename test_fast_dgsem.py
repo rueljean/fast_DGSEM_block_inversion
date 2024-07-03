@@ -29,7 +29,7 @@ class TestMethods:
             f_dgsem.L2d_matrix(D, lambda_x, lambda_y),
             f_dgsem.diagonal_auto_kron(M_diag),
         )
-        return mat.dot(self.rng.random(mat.shape[-1]))
+        return mat @ self.rng.random(mat.shape[-1])
 
     @pytest.mark.parametrize("lambda_x", [1.0, 2.0], ids=lambda l: f"Lambda x: {l}")
     @pytest.mark.parametrize("lambda_y", [1.0], ids=lambda l: f"Lambda y: {l}")
@@ -38,7 +38,7 @@ class TestMethods:
         M_diag = f_dgsem.mass_matrix_diag(p)
         rhs = self.get_random_rhs(D, M_diag, lambda_x, lambda_y)
         assert np.allclose(
-            np.dot(f_dgsem.L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y), rhs),
+            f_dgsem.L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y) @ rhs,
             f_dgsem.L2d_inversion_analytical_FDM(
                 D, M_diag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
             ).flatten(order="F"),
@@ -73,10 +73,10 @@ class TestMatrix:
         A = np.diag(diag)
         B = self.rng.random((self.N, self.N))
         if left_prod:
-            assert np.allclose(f_dgsem.diagonal_matrix_multiply(diag, B), A.dot(B))
+            assert np.allclose(f_dgsem.diagonal_matrix_multiply(diag, B), A @ B)
         else:
             assert np.allclose(
-                B.dot(A), f_dgsem.diagonal_matrix_multiply_right(B, diag)
+                B @ A, f_dgsem.diagonal_matrix_multiply_right(B, diag)
             )
 
     @pytest.mark.parametrize(

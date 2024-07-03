@@ -263,9 +263,9 @@ def D_matrix(p):
         The matrix
     """
     points = LOBATTO_POINTS_BY_ORDER[p]
-    D = np.zeros((p + 1, p + 1))
-    for k in range(0, p + 1):
-        for l in range(0, p + 1):
+    D = np.empty((p + 1, p + 1))
+    for k in range(p + 1):
+        for l in range(p + 1):
             D[k][l] = lagrange_derivative(l, points[k], points)
     return D
 
@@ -388,7 +388,7 @@ def eigen_2D_diag(Psi, lambda_x, lambda_y, as_array=True):
 
 
 def fast_diagonalization_method(P, Q, L_inv, rhs, invP=None, invQ=None):
-    """Solve a problem of the form
+    r"""Solve a problem of the form
     ```math
     (I \kron A + B \kron I) x = rhs
     ```
@@ -400,13 +400,18 @@ def fast_diagonalization_method(P, Q, L_inv, rhs, invP=None, invQ=None):
     ```
     following steps (3.12)-(3.15).
 
-    Note:
+    Notes:
         The rhs should already be in matrix form.
+        The main point on which it relies is the following identity:
+        ```math
+        (A \kron B) u = A.U.B^T
+        ```
+        where `U` is a convenient matrix form of `u`
 
     P: np.ndarray
-        Diagonalization matrix for A
+        Diagonalization matrix for `A`
     Q: np.ndarray
-        Diagonalization matrix for B
+        Diagonalization matrix for `B`
     L_inv: np.ndarray
         Reciprocal of the eigenvalues matrix. It should already be in the final form
         combining both sets of eigenvalues.
@@ -426,11 +431,11 @@ def fast_diagonalization_method(P, Q, L_inv, rhs, invP=None, invQ=None):
         invQ = np.linalg.inv(Q)
     # We use in the actual code below a concise formula, but for the sake of the
     # example, we give here the step-by-step computation of the original paper
-    # R = rhs.dot(invQ.T)  # [LRT, (3.12)]
-    # S = L_diag_inv * invP.dot(R)  # [LRT, (3.13)]
-    # T = S.dot(Q.T)  # [LRT, (3.14)]
-    # U = P.dot(T)  # [LRT, (3.15)]
-    return P.dot(np.dot(L_inv * invP.dot(rhs.dot(invQ.T)), Q.T))
+    # R = rhs @ invQ.T  # [LRT, (3.12)]
+    # S = L_diag_inv * (invP @ R)  # [LRT, (3.13)]
+    # T = S @ Q.T  # [LRT, (3.14)]
+    # U = P @ T  # [LRT, (3.15)]
+    return P @ np.matmul(L_inv * (invP @ (rhs @ invQ.T)), Q.T)
 
 
 def eigen_L_numpy(D):
@@ -547,7 +552,7 @@ def L2d_inversion_analytical(
     iMR2d = iMR2d if iMR2d is not None else np.kron(invMR, invMR)
     iR2d = iR2d if iR2d is not None else np.kron(invR, invR)
 
-    return np.dot(iMR2d, diagonal_solve(Psi2d_diag, iR2d))
+    return iMR2d @ diagonal_solve(Psi2d_diag, iR2d)
 
 
 def L2d_inversion_analytical_FDM(
@@ -690,7 +695,7 @@ def L2d_inversion_viscosity_numpy(
         )
 
     # [MRR, (45)]
-    L2dV = L2d0 - np.dot(Uv, VvT)
+    L2dV = L2d0 - np.matmul(Uv, VvT)
 
     # M is diagonal, hence we M<kron>M is diagonal
     return diagonal_solve(M2d_invdiag, np.linalg.inv(L2dV), True)
@@ -775,13 +780,13 @@ def L2d_inversion_viscosity_analytical(
         )
 
     # Inverse of leftmost equation of [MRR, (46)], that is, [MRR, Algorithm 1 - step 1]
-    invL2d0 = np.dot(R2d, diagonal_solve(invdiagPsi, iR2d, True))
+    invL2d0 = R2d @ diagonal_solve(invdiagPsi, iR2d, True)
 
     # [MRR, Algorithm 1 - step 2]
     Z = (
         2
         * d_min
-        * np.dot(
+        * np.matmul(
             R2d,
             diagonal_solve(
                 invdiagPsi,
@@ -792,7 +797,7 @@ def L2d_inversion_viscosity_analytical(
     )
 
     # omega = LOBATTO_WEIGHTS_BY_ORDER[p].reshape((p + 1, 1))
-    # Z = np.dot(
+    # Z = np.matmul(
     #    invL2d0,
     #    np.concatenate(
     #        (
@@ -806,12 +811,12 @@ def L2d_inversion_viscosity_analytical(
     # M is diagonal, hence M<kron>M is diagonal, [MRR, Algorithm 1 - step 4]
     L2dV_explInv = diagonal_solve(
         M2d_invdiag,
-        np.dot(
+        np.matmul(
             diagonal_add(
-                np.dot(
+                np.matmul(
                     Z,
                     # [MRR, Algorithm 1 - step 3]
-                    np.linalg.solve(diagonal_add(-np.dot(VvT, Z), 1.0), VvT),
+                    np.linalg.solve(diagonal_add(-VvT @ Z, 1.0), VvT),
                 ),
                 1.0,
             ),
@@ -896,9 +901,9 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     ref_mat = diagonal_matrix_multiply_right(
         L2d_matrix(D, lambda_x, lambda_y), diagonal_auto_kron(M_diag)
     )
-    ref_rhs = ref_mat.dot(ref_sol)
+    ref_rhs = ref_mat @ ref_sol
 
-    sol_numpy = L2d_numpyInv.dot(ref_rhs)
+    sol_numpy = L2d_numpyInv @ ref_rhs
     sol_FDM = L2d_inversion_analytical_FDM(
         D, M_diag, lambda_x, lambda_y, ref_rhs.reshape(D.shape, order="F")
     ).flatten(order="F")
