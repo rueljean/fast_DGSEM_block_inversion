@@ -828,6 +828,123 @@ def L2d_inversion_viscosity_analytical(
     return L2dV_explInv
 
 
+def L2d_inversion_viscosity_analytical_FDM(
+    D,
+    M2d_invdiag,
+    lambda_x,
+    lambda_y,
+    rhs,
+    Psi=None,
+    R=None,
+    invR=None,
+    VvT=None,
+    IOmega=None,
+    OmegaI=None,
+):
+    """Invert 2D systems resulting from DGSEM problems with graph-viscosity with
+    analytical method using Fast Diagonalization Method of [LRT, Sect. 3].
+
+    Reference:
+        Invert [MRR, (45)] using `numpy` tools
+
+    p: int
+        Polynomial order
+    D: np.ndarray
+        Derivative matrix [MRR, (6)]
+    M2d_invdiag: np.ndarray
+        Reciprocal of the diagonal of the 2D mass matrix `M<kron>M`, where M is the 1D
+        mass matrix defined in  [MRR, (17)]
+    lambda_x, lambda_y: float
+        Ratio between celerity*time step over spatial grid size in, respectively, in x
+        and y direction
+    rhs: np.ndarray
+        Right-hand side of the problem in matrix form
+    Psi: np.ndarray or None
+        Eigenvalues, see [MRR, (38)]
+    R: np.ndarray or None
+        Right-eigenvector matrix
+    invR: np.ndarray or None
+        Inverse of the right-eigenvector matrix
+    VvT: np.array or None
+        Matrix with sparse structure for 2D problems, see rightmost equation of
+        [MRR, (46)]
+    IOmega: np.array or None
+        Kronecker product of identity and Lobatto weights, first element of RHS of
+        central equation of [MRR, (46)]
+    OmegaI: np.array or None
+        Kronecker product of Lobatto weights and identity, second element of RHS of
+        central equation of [MRR, (46)]
+
+    Return:
+        The solution of the problem
+    """
+    p = D.shape[0] - 1
+    d_min = d_min_BY_ORDER[p]
+
+    lbd = lambda_x + lambda_y
+
+    Psi = Psi if Psi is not None else eigen_L_analytical(D)
+    # Inverse of the central element of RHS of leftmost equation of [MRR, (46)]
+    # Explicit diagonal block inversion
+    # invPsi2d = np.linalg.inv(Psi2d + 2 * d_min * lbd * np.kron(I, I))
+    invdiagPsi = np.reciprocal(
+        eigen_2D_diag(Psi, lambda_x, lambda_y) + 2 * d_min * lbd
+    ).reshape(D.shape, order="F")
+
+    if R is None:
+        R = R_matrix(D, Psi)
+        invR = np.linalg.inv(R)
+    elif invR is None:
+        invR = np.linalg.inv(R)
+
+    if IOmega is None or OmegaI is None:
+        Omega = np.asarray(LOBATTO_WEIGHTS_BY_ORDER[p]).reshape((p + 1, 1))
+    IOmega = IOmega if IOmega is not None else I_kron_mat(Omega)
+    OmegaI = OmegaI if OmegaI is not None else np.kron(Omega, np.eye(*D.shape))
+
+    # Central part of [MRR, (46)]
+    Uv = 2 * d_min * np.concatenate((lambda_x * IOmega, lambda_y * OmegaI), axis=1)
+    # Vv = np.concatenate(
+    #    (np.kron(I, np.ones((p + 1, 1))), np.kron(np.ones((p + 1, 1)), I)), axis=1
+    # )
+
+    if VvT is None:
+        VvT = np.transpose(
+            np.concatenate(
+                (
+                    I_kron_mat(np.ones((p + 1, 1))),
+                    np.kron(np.ones((p + 1, 1)), np.eye(*D.shape)),
+                ),
+                axis=1,
+            )
+        )
+    # Solving Steps 1 and 2 [MRR, Algorithm 1] together
+    Zy = fast_diagonalization_method(
+        R,
+        R,
+        invdiagPsi,
+        np.append(
+            # Transpose to make the dimensions match. Final dimension (p+2)x(p+1)x(p+1)
+            Uv.reshape((*D.shape, -1), order="F").transpose((2, 0, 1)),
+            rhs[np.newaxis, :, :],
+            axis=0,
+        ),
+        invR,
+        invR,
+    )
+    # Some concerns about copying memory here
+    y = Zy[-1, :, :].flatten(order="F")
+    # Transpose back
+    Z = Zy[:-1, :, :].transpose((1, 2, 0)).reshape(Uv.shape, order="F")
+    # [MRR, Algorithm 1 - step 4]
+    return diagonal_solve(
+        M2d_invdiag,
+        #        [MRR, Algorithm 1 - step 3]
+        y + (Z @ np.linalg.solve(diagonal_add(-VvT @ Z, 1.0), VvT @ y)),
+        True,
+    )
+
+
 def compare_eigenvalues_computation(p):
     """Compare the computation of the eigenvalues of the L matrix with numpy function
     and analytical formula
@@ -940,7 +1057,8 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
 
     # Main matrices
     D = D_matrix(p)  # [MRR, (6)]
-    M2d_invdiag = np.reciprocal(diagonal_auto_kron(mass_matrix_diag(p)))
+    M_diag = mass_matrix_diag(p)
+    M2d_invdiag = np.reciprocal(diagonal_auto_kron(M_diag))
 
     L2dV_numpyInv = L2d_inversion_viscosity_numpy(D, M2d_invdiag, lambda_x, lambda_y)
     L2dV_explInv = L2d_inversion_viscosity_analytical(
@@ -952,6 +1070,54 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
             np.linalg.norm(L2dV_numpyInv - L2dV_explInv)
         )
     )
+    ##############################################
+    # Comparison using Fast Diagonalization Method
+    ##############################################
+    # To choose a common rhs, we compute the matrix and choose a random solution
+    ref_sol = np.random.rand((p + 1) ** 2)
+    d_min = d_min_BY_ORDER[p]
+    # See [MRR, (46-48)]
+    Omega = np.asarray(LOBATTO_WEIGHTS_BY_ORDER[p]).reshape((p + 1, 1))
+    Uv = (
+        2
+        * d_min
+        * np.concatenate(
+            (lambda_x * I_kron_mat(Omega), lambda_y * np.kron(Omega, np.eye(*D.shape))),
+            axis=1,
+        )
+    )
+    Vv = np.concatenate(
+        (
+            I_kron_mat(np.ones((p + 1, 1))),
+            np.kron(np.ones((p + 1, 1)), np.eye(*D.shape)),
+        ),
+        axis=1,
+    )
+    ref_mat = diagonal_matrix_multiply_right(
+        diagonal_add(
+            L2d_matrix(D, lambda_x, lambda_y), 2 * d_min * (lambda_x + lambda_y)
+        )
+        - Uv @ Vv.T,
+        diagonal_auto_kron(M_diag),
+    )
+    ref_rhs = ref_mat @ ref_sol
+
+    sol_numpy = L2dV_numpyInv @ ref_rhs
+    sol_FDM = L2d_inversion_viscosity_analytical_FDM(
+        D, M2d_invdiag, lambda_x, lambda_y, ref_rhs.reshape(D.shape, order="F")
+    )
+    print("Verification of solutions:")
+    print(
+        "  - Norm of the difference between the two methods: {}".format(
+            np.linalg.norm(sol_numpy - sol_FDM)
+        )
+    )
+    print(
+        "  - Norm of the difference wrt reference solution: {}\n".format(
+            np.linalg.norm(ref_sol - sol_FDM)
+        )
+    )
+
     return L2dV_numpyInv
 
 
