@@ -443,7 +443,7 @@ def eigen_L_numpy(D):
     numpy functions
 
     Reference:
-        Solution of [MRR, (38)] using `numpy` tools
+        Perform [MRR, (38)] using `numpy` tools
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
@@ -457,11 +457,10 @@ def eigen_L_numpy(D):
 
 
 def eigen_L_analytical(D):
-    """Using matrix D, compute matrix L, then compute its eigen-values using standard
-    numpy functions
+    """Using matrix D, compute the eigen-values of matrix L using an analytical formula
 
     Reference:
-        Solution of [MRR, (38)] using [MRR, (40)]
+        Perform [MRR, (38)] using [MRR, (40)]
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
@@ -470,17 +469,22 @@ def eigen_L_analytical(D):
         The eigenvalues
     """
     p = D.shape[0] - 1
-
+    coeff = np.empty(p + 2)
+    coeff[0] = LOBATTO_WEIGHTS_BY_ORDER[p][p]
+    coeff[1] = 1  # First is identity
+    coeff[2] = D[p, p]  # Second is matrix itself
+    prod = D.copy()
+    for i in range(3, len(coeff)):
+        prod = prod @ D
+        coeff[i] = prod[p, p]
+    # Alternative
     # Storing powers of D: D_powers[i,:,:] is the i-th power of D
     # TODO: Since we use only one entry of these matrices, could we find a more
     # efficient way instead of computing the full matrix (since it's a power,
     # keeping the last row of the matrix should be sufficient even to compute the whole
     # series)?
-    D_powers = np.stack([np.linalg.matrix_power(D, i) for i in range(0, p + 1)])
-
-    coeff = np.zeros(p + 2)
-    coeff[0] = LOBATTO_WEIGHTS_BY_ORDER[p][p]
-    coeff[1:] = D_powers[:, p, p]
+    # D_powers = np.stack([np.linalg.matrix_power(D, i) for i in range(0, p + 1)])
+    # coeff[1:] = D_powers[:, p, p]
 
     # Eigenvalues
     Psi = np.roots(coeff)
@@ -491,7 +495,7 @@ def L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y):
     """Invert 2D systems resulting from DGSEM problems with numpy function
 
     Reference:
-        Compute LHS of [MRR, (43)] using `numpy` tools
+        Compute LHS of [MRR, (43)] (see also [MRR, (B.1)]) using `numpy` tools
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
@@ -521,7 +525,7 @@ def L2d_inversion_analytical(
     """Invert 2D systems resulting from DGSEM problems with analytical method
 
     Reference:
-        [MRR, (45)]
+        [MRR, (43)] (see also [MRR, (B.1)])
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
@@ -570,7 +574,7 @@ def L2d_inversion_analytical_FDM(
     Diagonalization Method of [LRT, Sect. 3].
 
     Reference:
-        [MRR, (45)]
+        [MRR, (43)] (see also [MRR, (B.1)])
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
@@ -640,7 +644,7 @@ def L2d_inversion_viscosity_numpy(
     standard `numpy` functions
 
     Reference:
-        Invert [MRR, (45)] using `numpy` tools
+        Invert LHS of [MRR, (B.2)] using `numpy` tools
 
     p: int
         Polynomial order
@@ -719,7 +723,7 @@ def L2d_inversion_viscosity_analytical(
     analytical formula
 
     Reference:
-        Invert [MRR, (45)] using [MRR, Algorithm 1]
+        Invert LHS of [MRR, (B.2)] using [MRR, Algorithm 1]
 
     p: int
         Polynomial order
@@ -814,7 +818,7 @@ def L2d_inversion_viscosity_analytical(
     L2dV_explInv = diagonal_solve(
         M2d_invdiag,
         np.matmul(
-                    # [MRR, Algorithm 1 - step 3]
+            #                [MRR, Algorithm 1 - step 3]
             diagonal_add(Z @ np.linalg.solve(diagonal_add(-VvT @ Z, 1.0), VvT), 1.0),
             invL2d0,
         ),
@@ -841,7 +845,7 @@ def L2d_inversion_viscosity_analytical_FDM(
     analytical method using Fast Diagonalization Method of [LRT, Sect. 3].
 
     Reference:
-        Invert [MRR, (45)] using `numpy` tools
+        Solve [MRR, (B.2)]
 
     p: int
         Polynomial order
@@ -942,8 +946,8 @@ def L2d_inversion_viscosity_analytical_FDM(
 
 
 def get_random_rhs_2D_inversion(D, M_diag, lambda_x, lambda_y):
-    r"""Get a rhs for the problem [MRR, (43)], `L_{2d}(M \ kron M)x=rhs`. The idea is to
-    build the matrix, generate a random `x` and compute the rhs accordingly.
+    r"""Get a rhs for the problem [MRR, (B.1)], `L_{2d}(M \ kron M)x=rhs`. The idea is
+    to build the matrix, generate a random `x` and compute the rhs accordingly.
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
@@ -966,8 +970,8 @@ def get_random_rhs_2D_inversion(D, M_diag, lambda_x, lambda_y):
 
 
 def get_random_rhs_2D_inversion_visosity(D, M_diag, lambda_x, lambda_y):
-    r"""Get a rhs for the problem [MRR, (45)], `L^{v}_{2d}(M \ kron M)x=rhs`. The idea is
-    to build the matrix, generate a random `x` and compute the rhs accordingly.
+    r"""Get a rhs for the problem [MRR, (B.2)], `L^{v}_{2d}(M \ kron M)x=rhs`. The idea
+    is to build the matrix, generate a random `x` and compute the rhs accordingly.
 
     D: np.ndarray
         Derivative matrix [MRR, (6)]
@@ -978,7 +982,7 @@ def get_random_rhs_2D_inversion_visosity(D, M_diag, lambda_x, lambda_y):
         and y direction
 
     Return:
-        A vector to be used as rhs
+        A vector to be used as rhs and the solution
     """
     p = D.shape[0] - 1
     d_min = d_min_BY_ORDER[p]
@@ -1015,7 +1019,7 @@ def compare_eigenvalues_computation(p):
     and analytical formula
 
     Reference:
-        Compare methods for solving [MRR, (38)]
+        Compare methods for performing diagonalization [MRR, (38)]
 
     p: int
         Polynomial order
@@ -1043,10 +1047,11 @@ def compare_eigenvalues_computation(p):
 
 
 def compare_2D_inversion(p, lambda_x, lambda_y):
-    """Compare standard and fast methods to invert 2D systems resulting from DGSEM problems
+    """Compare standard and fast methods to invert 2D systems resulting from DGSEM
+    problems.
 
     Reference:
-        Compare methods for computing LHS [MRR, (43)]
+        Compare methods for computing LHS of [MRR, (43)], see also [MRR, (B.1)]
 
     p: int
         Polynomial order
@@ -1099,7 +1104,7 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     problems with graph-viscosity
 
     Reference:
-        Compare methods for inverting [MRR, (45)]
+        Compare methods for inverting [MRR, (45)], see also [MRR, (B.2)]
 
     p: int
         Polynomial order
