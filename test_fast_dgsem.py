@@ -31,9 +31,7 @@ class TestMethods:
         rhs, _ = f_dgsem.get_random_rhs_2D_inversion(D, M_diag, lambda_x, lambda_y)
         assert np.allclose(
             f_dgsem.L2d_inversion_numpy(D, M_diag, lambda_x, lambda_y) @ rhs,
-            f_dgsem.L2d_inversion_analytical_FDM(
-                D, M_diag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
-            ).flatten(order="F"),
+            f_dgsem.L2d_inversion_analytical_FDM(D, M_diag, lambda_x, lambda_y, rhs),
         )
 
     @pytest.mark.parametrize("lambda_x", [1.0, 2.0], ids=lambda l: f"Lambda x: {l}")
@@ -63,7 +61,7 @@ class TestMethods:
             f_dgsem.L2d_inversion_viscosity_numpy(D, M2d_invdiag, lambda_x, lambda_y)
             @ rhs,
             f_dgsem.L2d_inversion_viscosity_analytical_FDM(
-                D, M2d_invdiag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
+                D, M2d_invdiag, lambda_x, lambda_y, rhs
             ),
         )
 

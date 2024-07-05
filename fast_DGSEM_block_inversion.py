@@ -580,7 +580,7 @@ def L2d_inversion_analytical_FDM(
         Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
     rhs: np.ndarray
-        Right-hand side of the problem in matrix form
+        Right-hand side of the problem (in vector storage)
     Psi: np.ndarray or None
         Eigenvalues, see [MRR, (38)]
     R: np.ndarray or None
@@ -591,7 +591,7 @@ def L2d_inversion_analytical_FDM(
         Product of the inverse of the mass matrix and the right-eigenvector matrix
 
     Return:
-        The solution of the problem
+        The solution of the problem (in vector storage)
     """
     Psi = Psi if Psi is not None else eigen_L_analytical(D)
     Psi2d_diag_inv = np.reciprocal(eigen_2D_diag(Psi, lambda_x, lambda_y)).reshape(
@@ -622,7 +622,9 @@ def L2d_inversion_analytical_FDM(
 
     # METHOD 2: include the inversion by M in the FDM, however we tricked it, since
     # what we pass as P^{-1} is not exactly the inverse of what we pass as P.
-    return fast_diagonalization_method(invM_R, invM_R, Psi2d_diag_inv, rhs, invR, invR)
+    return fast_diagonalization_method(
+        invM_R, invM_R, Psi2d_diag_inv, rhs.reshape(D.shape, order="F"), invR, invR
+    ).flatten(order="F")
 
 
 def L2d_inversion_viscosity_numpy(
@@ -812,14 +814,8 @@ def L2d_inversion_viscosity_analytical(
     L2dV_explInv = diagonal_solve(
         M2d_invdiag,
         np.matmul(
-            diagonal_add(
-                np.matmul(
-                    Z,
                     # [MRR, Algorithm 1 - step 3]
-                    np.linalg.solve(diagonal_add(-VvT @ Z, 1.0), VvT),
-                ),
-                1.0,
-            ),
+            diagonal_add(Z @ np.linalg.solve(diagonal_add(-VvT @ Z, 1.0), VvT), 1.0),
             invL2d0,
         ),
         True,
@@ -858,7 +854,7 @@ def L2d_inversion_viscosity_analytical_FDM(
         Ratio between celerity*time step over spatial grid size in, respectively, in x
         and y direction
     rhs: np.ndarray
-        Right-hand side of the problem in matrix form
+        Right-hand side of the problem (in vector storage)
     Psi: np.ndarray or None
         Eigenvalues, see [MRR, (38)]
     R: np.ndarray or None
@@ -876,7 +872,7 @@ def L2d_inversion_viscosity_analytical_FDM(
         central equation of [MRR, (46)]
 
     Return:
-        The solution of the problem
+        The solution of the problem (in vector storage)
     """
     p = D.shape[0] - 1
     d_min = d_min_BY_ORDER[p]
@@ -926,7 +922,7 @@ def L2d_inversion_viscosity_analytical_FDM(
         np.append(
             # Transpose to make the dimensions match. Final dimension (p+2)x(p+1)x(p+1)
             Uv.reshape((*D.shape, -1), order="F").transpose((2, 0, 1)),
-            rhs[np.newaxis, :, :],
+            rhs.reshape((1, *D.shape), order="F"),
             axis=0,
         ),
         invR,
@@ -1083,9 +1079,7 @@ def compare_2D_inversion(p, lambda_x, lambda_y):
     ##############################################
     rhs, sol_ref = get_random_rhs_2D_inversion(D, M_diag, lambda_x, lambda_y)
     sol_numpy = L2d_numpyInv @ rhs
-    sol_FDM = L2d_inversion_analytical_FDM(
-        D, M_diag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
-    ).flatten(order="F")
+    sol_FDM = L2d_inversion_analytical_FDM(D, M_diag, lambda_x, lambda_y, rhs)
     print("Verification of solutions:")
     print(
         "  - Norm of the difference between the two methods: {}".format(
@@ -1138,7 +1132,7 @@ def compare_2D_inversion_viscosity(p, lambda_x, lambda_y):
     rhs, sol_ref = get_random_rhs_2D_inversion_visosity(D, M_diag, lambda_x, lambda_y)
     sol_numpy = L2dV_numpyInv @ rhs
     sol_FDM = L2d_inversion_viscosity_analytical_FDM(
-        D, M2d_invdiag, lambda_x, lambda_y, rhs.reshape(D.shape, order="F")
+        D, M2d_invdiag, lambda_x, lambda_y, rhs
     )
     print("Verification of solutions:")
     print(
